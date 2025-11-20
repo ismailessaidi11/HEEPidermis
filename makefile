@@ -28,6 +28,9 @@ endif
 # TARGET options are 'asic' (default) and 'pynq-z2'
 TARGET ?= asic
 
+# Set the default architecture to that enabling RVE
+ARCH 	?= rv32imc
+
 # X-HEEP configuration
 XHEEP_DIR			:= $(ROOT_DIR)/hw/vendor/x-heep
 CHEEP_CFG  			?= $(ROOT_DIR)/config/cheep_configs.hjson
@@ -95,7 +98,7 @@ SIM_VCD 			?= $(BUILD_DIR)/sim-common/questa-waves.fst
 APP_MAKE 			:= $(wildcard sw/applications/$(PROJECT)/*akefile)
 
 TOOLCHAIN ?= GCC
-RISCV     ?= /shares/eslfiler1/apps/linux/Development/rv32imc
+RISCV     ?= $(RISCV_XHEEP)
 
 # Custom preprocessor definitions
 CDEFS				?=
@@ -203,6 +206,8 @@ cheep-gen: mcu-gen
 ## Build simulation model (do not launch simulation)
 .PHONY: verilator-build
 verilator-build:
+	@echo $(shell which verilator)
+
 	$(FUSESOC) run --no-export --target sim --tool verilator --build $(FUSESOC_FLAGS) epfl:cheep:cheep \
 		$(FUSESOC_ARGS)
 
@@ -325,7 +330,7 @@ ifneq ($(APP_MAKE),)
 endif
 ifeq ($(TOOLCHAIN), GCC)
 	@echo "### Building application for SRAM execution with GCC compiler..."
-	CDEFS=$(CDEFS) $(MAKE) -f $(XHEEP_MAKE) $(MAKECMDGOALS) LINKER=$(LINKER) LINK_FOLDER=$(LINK_FOLDER) ARCH=rv32imc RISCV=$(RISCV)
+	CDEFS=$(CDEFS) $(MAKE) -f $(XHEEP_MAKE) $(MAKECMDGOALS) LINKER=$(LINKER) LINK_FOLDER=$(LINK_FOLDER) ARCH=$(ARCH) RISCV=$(RISCV)
 		TOOLCHAIN=$(TOOLCHAIN) $(FUSESOC_FLAGS) $(FUSESOC_ARGS)
 	find sw/build/ -maxdepth 1 -type f -name "main.*" -exec cp '{}' $(BUILD_DIR)/sw/app/ \;
 else

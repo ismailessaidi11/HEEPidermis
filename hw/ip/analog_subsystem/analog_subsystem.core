@@ -20,7 +20,13 @@ filesets:
     - epfl:cheep:vref_packages
     files:
     - analog_subsystem.sv
+    - resistor.sv
     file_type: systemVerilogSource
+
+  verilator-waivers:
+    files:
+    - resistor-waivers.vlt
+    file_type: vlt
 
 targets:
   default: &default

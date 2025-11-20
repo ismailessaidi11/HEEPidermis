@@ -9,7 +9,6 @@
 // In the case of RTL-only simulations, the spice models are replaced for behavioral models.
 
 module analog_subsystem #(
-    parameter real resistance_kO = 30,
     parameter real supply_uV = 800_000
 ) (
     input logic                                      idac1_enable_i,       // Enable signal (active high)
@@ -44,6 +43,7 @@ module analog_subsystem #(
   integer iDAC2_IOUT_int_nA;
   integer VCOp_VIN_int_uV;
   integer VCOn_VIN_int_uV;
+  real    resistance_O;
   /* verilator lint_on UNUSED */
 
   // Analog blocks
@@ -68,9 +68,16 @@ module analog_subsystem #(
       .DAC_IOUT_int_nA(iDAC2_IOUT_int_nA)
   );
 
+    resistor #(
+        .CHANGE_RATE_HZ(100000000)
+    ) rskin (
+        .refresh(vco_refresh_i),
+        .r_ohm( resistance_O )
+    );
+
   always_comb begin
-    VCOp_VIN_int_uV = $rtoi(supply_uV - iDAC1_IOUT_int_nA * (resistance_kO / 1.01));
-    VCOn_VIN_int_uV = $rtoi(supply_uV - iDAC2_IOUT_int_nA * resistance_kO);
+    VCOp_VIN_int_uV = $rtoi(supply_uV - iDAC1_IOUT_int_nA * (resistance_O/1000 / 1.01));
+    VCOn_VIN_int_uV = $rtoi(supply_uV - iDAC2_IOUT_int_nA * resistance_O/1000);
   end
 
   VCO u_VCOp (
@@ -93,10 +100,19 @@ module analog_subsystem #(
 
   aMUX u_aMUX (.SEL(amux_sel_i));
 
-  iREF u_iREF1 (.CAL(iref1_calibration_i), .IOUT_int_nA() );
+  iREF u_iREF1 (
+      .CAL(iref1_calibration_i),
+      .IOUT_int_nA()
+  );
 
-  iREF u_iREF2 (.CAL(iref2_calibration_i), .IOUT_int_nA());
+  iREF u_iREF2 (
+      .CAL(iref2_calibration_i),
+      .IOUT_int_nA()
+  );
 
-  vREF u_vREF (.CAL(vref_calibration_i), .VOUT_int_mV());
+  vREF u_vREF (
+      .CAL(vref_calibration_i),
+      .VOUT_int_mV()
+  );
 
 endmodule
