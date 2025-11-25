@@ -413,7 +413,20 @@ jtag_close:
 # Open GDB
 .PHONY: jtag_run
 jtag_run:
-	$(RISCV_XHEEP)/bin/riscv32-unknown-elf-gdb sw/build/main.elf -x scripts/gdbInit || true
+	$(RISCV_XHEEP)/bin/riscv32-unknown-elf-gdb sw/build/main.elf -x scripts/asic/gdbInit || true
+
+
+## @section CHEEP boards control
+
+# Configure board sw stack
+.PHONY: board_config
+board_config:
+	ln -sfn $(CHEEP_BOARDS)/software_stack scripts/asic/cheep_boards_sw_stack
+
+# Configure PLL
+.PHONY: board_freq
+board_freq: board_config
+	( cd scripts/asic; python3 board_set_pll_freq.py $(PLL_FREQ); cd -)
 
 ## @section Cleaning
 
