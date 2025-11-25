@@ -415,7 +415,6 @@ jtag_close:
 jtag_run:
 	$(RISCV_XHEEP)/bin/riscv32-unknown-elf-gdb sw/build/main.elf -x scripts/asic/gdbInit || true
 
-
 ## @section CHEEP boards control
 
 # Configure board sw stack

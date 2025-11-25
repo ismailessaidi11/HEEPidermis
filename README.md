@@ -69,7 +69,72 @@ Make sure the Conda environment is active:
    - Verilator 4
 
 
-### RTL Simulation
+## Programming the ASIC
+
+You can program the ASIC through 3 alternatives:
+ - JTAG
+ - Loading an external flash that HEEPidermis can read through SPI
+ - Loading the program in RAM through the SPI slave peripheral
+
+### Programming through JTAG
+
+You need to connect the JTAG interface to an FTDI chip. This is avaialble on the [EPFL programmer](https://github.com/esl-epfl/x-heep-programmer-pmod) or on the [CHEEP boards](https://eslgit.epfl.ch/heep/cheep-boards) (currently only available upon request).
+
+1. The BOOT switches should be set to
+
+|--------------|---|
+| FLASH_EXEC   | 0 |
+| BOOT_SEL     | 0 |
+
+2. Set the system clock to 1 MHz. You can do that in two steps if you have the CHEEP board, and have exported the variable `$CHEEP_BOARDS` pointing to the folder where the repo is.
+```bash
+make board_config
+make board_freq PLL_FREQ=1_000_000  #default
+```
+
+3. Compile the code
+```bash
+make app BOOT_MODE=jtag
+```
+
+4. Open openOCD and picocom to see the UART output
+```bash
+make jtag_open
+```
+5. Open GDB and run the program
+```bash
+make jtag_run
+```
+Useful commands:
+> `c` (continue)
+>
+> `monitor reset hart`
+>
+> `monitor pc _start`
+>
+> `si` (next instruction)
+>
+> `disassembler`
+>
+> `x/8i` (see the following instructions).
+
+6. Exit GDB with `ctrl+C` and type `quit`
+7. Close the openOCD and uart terminals with
+```bash
+make jtag_close
+```
+
+
+### Programming from the FLASH
+
+Testing...
+
+### Programming through SPI
+
+Testing...
+
+
+## RTL Simulation
 
 The included [`makefile`](./makefile) proves all the necessary rules to build _HEEPidermis_:
 
