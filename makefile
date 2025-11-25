@@ -385,6 +385,36 @@ vendor-update:
 	mkdir -p $@
 
 
+## @section Executing on ASIC
+
+# Open openOCD
+.PHONY: openocd
+openocd:
+	(xterm -hold -e "openocd -f hw/vendor/x-heep/tb/core-v-mini-mcu-pynq-z2-esl-programmer.cfg; exec bash" & \
+	echo $$! > .openocd.pid )
+
+# Open uart
+.PHONY: uart
+uart:
+	(xterm -hold -e "picocom -b 2500 -r -l --imap lfcrlf /dev/serial/by-id/usb-FTDI_Quad_RS232-HS-if02-port0" & \
+	echo $$! > .uart.pid )
+
+# Open openOCD and uart
+.PHONY: jtag_open
+jtag_open: openocd uart
+
+# Close the generated terminals
+.PHONY: jtag_close
+jtag_close:
+	kill `cat .openocd.pid` 2>/dev/null
+	kill `cat .uart.pid`     2>/dev/null
+	rm -f .openocd.pid .uart.pid
+
+# Open GDB
+.PHONY: jtag_run
+jtag_run:
+	$(RISCV_XHEEP)/bin/riscv32-unknown-elf-gdb sw/build/main.elf -x scripts/gdbInit || true
+
 ## @section Cleaning
 
 ## Clean build directory
