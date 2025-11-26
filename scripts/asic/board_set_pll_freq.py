@@ -8,19 +8,7 @@ from pyftdi.i2c import I2cController, I2cNackError
 i2c = I2cController()
 
 
-import subprocess
-import re
-
-# run the script and capture output
-out = subprocess.check_output(
-    ["python3", "/home/juan/.local/bin/ftdi_urls.py"],
-    text=True
-)
-
-# find the line that matches ftdi://.../2
-m = re.search(r"(ftdi://ftdi:[0-9a-fA-F:]+/2)", out)
-url = m.group(1) if m else None
-
+url = "ftdi://ftdi:4232h/2"
 print(url)
 
 # then use it

@@ -62,7 +62,7 @@ DPI_CINC			:= -I$(dir $(shell which verilator))../share/verilator/include/vltstd
 
 # Simulation configuration
 LOG_LEVEL			?= LOG_FULL
-BOOT_MODE			?= force # jtag: wait for JTAG (DPI module), flash: boot from flash, force(default): load firmware into SRAM
+BOOT_MODE			?= jtag # jtag: wait for JTAG (default), flash: boot from flash, force: load firmware into SRAM
 FIRMWARE			?= $(ROOT_DIR)/build/sw/app/main.hex
 LINKER 				?= flash_load
 ifeq ($(BOOT_MODE), jtag)
