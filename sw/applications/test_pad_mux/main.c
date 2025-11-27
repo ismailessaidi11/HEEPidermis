@@ -41,17 +41,12 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // Generate output toggles on GPIO_5
-    for (int i = 0; i < 100; i++) {
+    while(1){
       gpio_write(GPIO_5, true);
-      for (int i = 0; i < 10; i++) {
-        asm volatile("nop");
-      }
+      for(int i=0;i<500000;i++) asm volatile("nop");
       gpio_write(GPIO_5, false);
-      for (int i = 0; i < 10; i++) {
-        asm volatile("nop");
-      }
-    }
+      for(int i=0;i<500000;i++) asm volatile("nop");
+  }
 
     // Check in the wavevorms that the GPIO_5 pin is toggling
 
