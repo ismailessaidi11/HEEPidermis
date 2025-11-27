@@ -114,6 +114,11 @@ TEST_FLAGS=
 # Dummy target to force software rebuild
 PARAMS = $(PROJECT)
 
+PLL_FREQ ?= 10000000
+# For this computation check hw/vendor/x-heep/sw/target/sim/x-heep.h
+UART_BAUD := $(shell echo "$(PLL_FREQ) / 390.625" | bc | xargs printf "%.0f")
+
+
 # ----- BUILD RULES ----- #
 
 # Get the path of this Makefile to pass to the Makefile help generator
@@ -396,7 +401,7 @@ openocd:
 # Open uart
 .PHONY: uart
 uart:
-	(xterm -hold -e "picocom -b 2500 -r -l --imap lfcrlf /dev/serial/by-id/usb-FTDI_Quad_RS232-HS-if02-port0" & \
+	(xterm -hold -e "picocom -b $(UART_BAUD) -r -l --imap lfcrlf /dev/serial/by-id/usb-FTDI_Quad_RS232-HS-if02-port0" & \
 	echo $$! > .uart.pid )
 
 # Open openOCD and uart
@@ -414,6 +419,12 @@ jtag_close:
 .PHONY: jtag_run
 jtag_run:
 	$(RISCV_XHEEP)/bin/riscv32-unknown-elf-gdb sw/build/main.elf -x scripts/asic/gdbInit || true
+
+# Compile an app with all the requirements to work for jtag configuration
+.PHONY: jtag_build
+jtag_build:
+	$(MAKE) app BOOT_MODE=jtag
+#COMPILER_FLAGS="-DUART_BAUDRATE=$(UART_BAUD) -DREFERENCE_CLOCK_Hz=$(PLL_FREQ)"
 
 ## @section CHEEP boards control
 

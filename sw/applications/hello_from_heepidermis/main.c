@@ -2,5 +2,5 @@
 #include "syscalls.h"
 int main(){
     _writestr("hello from HEEPidermis");
-    return 1;
+    return 0;
 }
