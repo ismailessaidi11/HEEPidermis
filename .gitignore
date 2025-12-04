@@ -41,7 +41,7 @@ transcipt
 private/
 .vscode/
 .Xil/
-*.txt
+# *.txt
 !util/*.txt
 hw/vendor/x-heep/tb/ext_bus.sv
 
