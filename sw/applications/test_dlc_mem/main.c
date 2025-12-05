@@ -199,6 +199,7 @@ int main() {
     dma_config_flags_t res;
 
     /*
+    CANNOT VALIDATE THE TRANSACTION, SINCE WE ARE GOING TO USE A CIRCULAR MODE ON THE MEMORY, WHICH IS NOT ACCEPTED.
     res = dma_validate_transaction(&trans, DMA_ENABLE_REALIGN, DMA_PERFORM_CHECKS_INTEGRITY);
     if( res != DMA_CONFIG_OK ){
         PRINTF("Error: dma_validate_transaction: %d\n",res );
@@ -245,39 +246,14 @@ int main() {
         CSR_SET_BITS(CSR_REG_MSTATUS, 0x8);
     }
 
-    // Stop the circular mode
+    // OPTIONAL: Stop the circular mode
     // dma_stop_circular(trans.channel);
 
     // Celebrate in a fairly lame way
     PRINTF("DMA done! Did %d windows and %d transactions which finished\n\r", window_intr_flag, transactions_intr_flag);
 
-/*############################################################
-####### CHECK THE RESULTS ###################################*/
-
-    // Checking  the results
-    PRINTF("\n\rRES\t| dLC\t| Golden");
-    uint16_t errors = 0;
-
-    // for( int i = 0; i < sizeof(dlc_results); i++ ){
-    //     printf("\n%d : %d", i, dlc_results[i]);
-    // }
-
-    // for (int i = 0; i < LC_STATS_CROSSINGS; i++)
-    // {
-    //     if(dlc_results[i] != lc_data_for_storage_data[i])
-    //     {
-    //         PRINTF("\n\rX %d\t| %d\t| %d", i, dlc_results[i], lc_data_for_storage_data[i]);
-    //         errors++;
-    //     }
-    // }
-
-    if( errors ){
-        PRINTF("\n\r=====================\n ERRORS: %d\n", errors);
-        return EXIT_FAILURE;
-    } else {
-        PRINTF("\n\r ALL GOOD!\n");
-        return EXIT_SUCCESS;
-    }
+    // There is nothing to check, as the results depend on the chosen configuration. Additionally, the circular mode will override whatever we try to check.
+    return EXIT_SUCCESS;
 
 
 }
