@@ -23,7 +23,7 @@ typedef enum{
 *
 * @param sel The channel to be selected
 */
-static inline void REFs_calibrate(uint8_t calibration, REF_t ref) {
+static inline void REFs_calibrate(uint16_t calibration, REF_t ref) {
     *(volatile uint32_t *)(REFS_CTRL_START_ADDRESS + REFS_CTRL_IREF1_CALIBRATION_REG_OFFSET*(ref+1)) = calibration;
 }
 

@@ -22,14 +22,14 @@
 
 #define IREF_NOMINAL_NA 400
 #define IREF_CALIB_LSB_NA 4
-#define IREF_CALIB_BITS 5
+#define IREF_CALIB_BITS 10
 #define IREF_CALIB_MAX 32
 #define IREF_CALIB_HLF 16
 #define IREF_EXPECTED_NA(val) (IREF_NOMINAL_NA - (IREF_CALIB_HLF)*IREF_CALIB_LSB_NA + val*IREF_CALIB_LSB_NA)
 
 #define VREF_NOMINAL_MV 800
 #define VREF_CALIB_LSB_MV 8
-#define VREF_CALIB_BITS 5
+#define VREF_CALIB_BITS 10
 #define VREF_CALIB_MAX 32
 #define VREF_CALIB_HLF 16
 #define VREF_EXPECTED_MV(val) VREF_NOMINAL_MV - (VREF_CALIB_HLF)*VREF_CALIB_LSB_MV + val*VREF_CALIB_LSB_MV
@@ -50,12 +50,15 @@ void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
     return;
 }
 
+uint16_t codes[] = {0, 1, 3, 7, 15, 31, 63, 127, 255, 511, 1023};
+
 void update_refs(uint8_t val){
-    val %= VREF_CALIB_MAX;
-    REFs_calibrate( val,    IREF1 );
-    REFs_calibrate( val,    IREF2 );
-    REFs_calibrate( val,    VREF );
-    printf("%d\t %d nA \t%d nA \t%d mV\n", val, IREF_EXPECTED_NA(val), IREF_EXPECTED_NA(val), VREF_EXPECTED_MV(val));
+    val %= sizeof(codes)/2;
+    uint16_t code = codes[val];
+    REFs_calibrate( code,    IREF1 );
+    REFs_calibrate( code,    IREF2 );
+    REFs_calibrate( code,    VREF );
+    printf("%d = %d\t %d nA \t%d nA \t%d mV\n", val, code, IREF_EXPECTED_NA(val), IREF_EXPECTED_NA(val), VREF_EXPECTED_MV(val));
 }
 
 int main() {
