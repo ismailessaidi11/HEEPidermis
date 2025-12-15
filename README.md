@@ -20,7 +20,11 @@ For all HEEPidermis-specific documentation, please refer to the documentation be
 
 <p align="center"><img src="./docs/img/HEEPidermis-diagram.svg" width="1000"></p>
 
-<p align="center"><img src="./docs/img/sizing-v6.png" width="1000"></p>
+<p align="center">
+<img src="./docs/img/sizing-v6.png" width="45%" style="display:inline-block;" >
+&nbsp;&nbsp;&nbsp;
+<img src="./docs/img/HEEPidermis-fingerprint.JPG" width="50%" style="display:inline-block;">
+</p>
 
 
 ## Index
