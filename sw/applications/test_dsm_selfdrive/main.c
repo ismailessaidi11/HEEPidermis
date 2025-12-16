@@ -18,16 +18,16 @@
 #define DSM_CLK_F_HZ 1
 #define SYS_FCLK_HZ 10000000
 // #define DSM_CLK_TOGGLE_CC (SYS_FCLK_HZ/(2*DSM_CLK_F_HZ))
-#define DSM_CLK_TOGGLE_CC (1<<8)
+#define DSM_CLK_TOGGLE_CC 500
 
 #define GPIO_DATA 2
 #define GPIO_CLK 3
 #define GPIO_LED 0
 
-#define SES_WG              24
+#define SES_WG              16
 #define SES_WINDOW_SIZE     8
 #define SES_WO              (SES_WG-SES_WINDOW_SIZE)
-#define SES_DECIM_FACTOR    128
+#define SES_DECIM_FACTOR    32
 
 // #define SES_SYSCLK_DIVISION (SYS_FCLK_HZ/DSM_CLK_F_HZ)
 #define SES_SYSCLK_DIVISION (DSM_CLK_TOGGLE_CC*2)
