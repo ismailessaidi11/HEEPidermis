@@ -2,41 +2,22 @@
 
 ### Introduction
 
-The filter implemented is a variant of Brown’s Simple Exponential Smoothing (SES) algorithm, adapted for low-power, hardware-efficient delta-sigma post-processing. Originally proposed by Sapriza et al., this SES filter provides a tunable and lightweight alternative to classical CIC filters, supporting runtime reconfiguration with minimal computational overhead.
+The filter implemented is a variant of Brown’s Simple Exponential Smoothing (SES) algorithm, adapted for low-power, hardware-efficient delta-sigma post-processing. This SES filter provides a tunable and lightweight alternative to classical CIC filters, supporting runtime reconfiguration with minimal computational overhead.
 
 In the context of *HEEPidermis*, the SES algorithm is expressed using shift-based arithmetic, making it highly suitable for hardware implementation without multipliers. The recursive formulation is as follows:
 
-\[
-    \begin{cases}
-        \widehat{Y}_i = \widehat{Y}_{i-1} - \widehat{y}_{i-1} + \left(x_i \ll (W_g - 1)\right) \\
-        \widehat{y}_i = \widehat{Y}_i \gg W_w
-    \end{cases}
-\]
+```math
+\begin{cases}
+\widehat{Y}_i = \widehat{Y}_{i-1} - \widehat{y}_{i-1} + \left(x_i \ll (W_g - 1)\right) \\
+\widehat{y}_i = \widehat{Y}_i \gg W_w
+\end{cases}
+```
 
 Here, $\widehat{Y}_i$ represents the internal state (accumulator), $x_i$ is the 1-bit delta-sigma input scaled by $W_g$, and $W_w$ controls the smoothing strength. This structure enables tunable decimation and filtering with minimal resource usage, making it well-suited for ultra-low-power biomedical applications.
 
-<img alt="Schematic representation of the SES filter architecture, showing individual processing stages and the output stage." src="../../img/SES FIlter_FInal.drawio(1).png" width=500>
+<img alt="Schematic representation of the SES filter architecture, showing individual processing stages and the output stage." src="../../img/SES FIlter_FInal.drawio(1).png" width=1000>
+
 *Figure: Schematic representation of the SES filter architecture, showing individual processing stages and the output stage.*
-
----
-
-### Setup
-
-This setup assumes the installation from the Setup section was executed successfully. The following steps are based mostly on the README from the HEEPidermis GitLab repository.
-
-If everything is set up correctly:
-
-1. Fork the *HEEPidermis* repository to your personal GitLab account and clone it locally.
-2. From the root directory of the cloned project, create the required Conda environment.
-
-Once the environment is configured, the complete compilation and simulation flow is:
-
-1. `make cheep-gen` — Generates the configured MCU architecture.
-2. `make verilator-build` — Compiles the SystemVerilog sources and builds the simulation model using Verilator.
-3. `make app PROJECT=myProject BOOT_MODE=force` — Compiles the C application specified by `myProject`.
-4. `make verilator-run BOOT_MODE=force` — Runs the compiled application in the Verilator simulation environment.
-
----
 
 ### Implementation
 
@@ -45,6 +26,7 @@ Once the environment is configured, the complete compilation and simulation flow
 The system is implemented in a newly created block with a top-level called `ses_filter.sv`. The general "software" architecture with the most important signals is shown below:
 
 <img alt="Top level system verilog architecture representation" src="../../img/SES_Architecture.drawio.png" width=500>
+
 *Figure: Top level system verilog architecture representation*
 
 The design begins by downsampling the system clock to generate a lower-frequency sampling clock, referred to as `clock_fs`. This sampling clock drives the filter pipeline. To safely transfer data back to the system clock domain, a Clock Domain Crossing (CDC) FIFO is used.
@@ -54,8 +36,6 @@ A detailed description of the input and output ports is provided in the header c
 ---
 
 #### Runtime configurability
-
-As for the CIC, this code leverages the X-HEEP/HEEPidermis platform's capability to interface between C code and SystemVerilog through a register abstraction mechanism. The registers are specified in the `ses_filter.hjson` file and generated using the `make cheep-gen` command, which calls the SES_filter.sh script and `regtool.py`.
 
 The following memory-mapped registers are defined:
 
@@ -75,6 +55,7 @@ The files `ses_filter_reg_top.sv` and `ses_filter_reg_pkg.sv` are auto-generated
 #### Automatic width adaptation
 
 <img alt="ses_filter.sv code snippet, register width extraction" src="../../img/WidthAdaptation.png" width=500>
+
 *Figure: ses_filter.sv code snippet, register width extraction*
 
 This design maximizes flexibility by deriving most width-related and structural parameters directly from the register definitions. These values are resolved at compile time, allowing their use in generate blocks and signal width declarations.
@@ -88,6 +69,7 @@ The only parameters not derived from register fields are the datapath width (sta
 #### System clock decimation
 
 <img alt="ses_filter.sv code snippet, system clock decimation" src="../../img/syClkDiv.png" width=450>
+
 *Figure: ses_filter.sv code snippet, system clock decimation*
 
 This block implements a clock divider that generates the sampling clock signal, `clock_fs`, by dividing the main system clock `clk_sys_i` according to the value in `ses_sysclk_division`. The resulting clock `clock_fs` drives the SES filter and is output as `clk_fs_o` to trigger the connected recording device.
@@ -99,11 +81,13 @@ The divider logic includes enable and reset handling.
 #### SES stage generation and internal logic
 
 <img alt="ses_filter.sv code snippet, SES stage generation" src="../../img/ses_Gen.png" width=500>
+
 *Figure: ses_filter.sv code snippet, SES stage generation*
 
 The generate block instantiates the required number of SES stages based on the parameter derived from the register width. Each `ses_stage` instance is parameterized with maximum data width, window size width, and input gain width. Stages are connected sequentially, with output of stage `k` serving as the input to stage `k+1`. Stage activation and gain configuration are runtime configurable.
 
-<img alt="ses_stage.sv code snippet, internal logic of a single stage" src="../../img/sesStageIntern.png" width=300>
+<img alt="ses_stage.sv code snippet, internal logic of a single stage" src="../../img/sesStageIntern.png" width=500>
+
 *Figure: ses_stage.sv code snippet, internal logic of a single stage*
 
 The internal logic of a single SES stage implements the mathematical formulation given above. The `activated_i` signal enables complete deactivation for energy-efficient operation.
@@ -123,11 +107,10 @@ The final stage is responsible for selecting the correct output, decimating the 
 
 ---
 
-## Results
-
-For the following plots, filter parameters were as described in the behavioral model by Juan Sapriza.
+## Examples
 
 <img alt="Proof of concept, using a perfect sinusoid as input" src="../../img/SES_res_perfSin.png" width=500>
+
 *Figure: Proof of concept, using a perfect sinusoid as input*
 
 <div style="display: flex;">

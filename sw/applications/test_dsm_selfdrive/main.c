@@ -27,7 +27,7 @@
 #define SES_WG              16
 #define SES_WINDOW_SIZE     8
 #define SES_WO              (SES_WG-SES_WINDOW_SIZE)
-#define SES_DECIM_FACTOR    32
+#define SES_DECIM_FACTOR    128
 
 // #define SES_SYSCLK_DIVISION (SYS_FCLK_HZ/DSM_CLK_F_HZ)
 #define SES_SYSCLK_DIVISION (DSM_CLK_TOGGLE_CC*2)
@@ -45,9 +45,11 @@
 #define SES_GAIN_STAGE_4 0
 #define SES_GAIN_STAGE_5 0
 
-#define SAMPLE_LENGHT_N 1000
+#define SAMPLE_LENGHT_N 400
 
-// #define PLOT_GRAPH
+#define PLOT_GRAPH
+// #define PRINT_DURING_SAMPLE
+// #define PRINT_AT_END
 
 /* By default, printfs are activated for FPGA and disabled for simulation. */
 #define PRINTF_IN_FPGA  1
@@ -236,8 +238,6 @@ int main(int argc, char *argv[])
        CONFIGURE THE SES FILTER
        ==================================== */
     SES_set_control_reg(false);
-    printf("\n---\n%d", SES_get_status());
-
 
     // Set SES filter parameters
     SES_set_window_size(SES_WINDOW_SIZE);
@@ -264,21 +264,18 @@ int main(int argc, char *argv[])
 
     uint32_t ses_output [SAMPLE_LENGHT_N];
 
-    /* ====================================
-       MAIN LOOP: toggle the clk and data
-       ==================================== */
     printf("\nhere we go!\n");
     printf("fclk:%d Hz, Wg:%d,Ww:%d,DF:%d,AS:%d(%d,%d,%d,%d,%d,%d)",DSM_CLK_F_HZ,SES_WG,SES_WINDOW_SIZE,SES_DECIM_FACTOR,SES_ACTIVATED_STAGES,SES_GAIN_STAGE_0,SES_GAIN_STAGE_1,SES_GAIN_STAGE_2,SES_GAIN_STAGE_3,SES_GAIN_STAGE_4,SES_GAIN_STAGE_5 );
 
     uint32_t    sample_idx  = 0;
 
     uint8_t point, last_point;
-    int32_t output = 0;
+    uint32_t output = 0;
 
     for( uint8_t i =0; i < sizeof(graph); i++ ){
         graph[i] = ' ';
     }
-    graph[64] = 0;
+    graph[100] = 0;
 
     timer_cycles_init();
     timer_irq_enable();
@@ -288,49 +285,37 @@ int main(int argc, char *argv[])
 
     while(1){
 
-        // // if( tick_idx%SES_DECIM_FACTOR == 0 ){
-        status = SES_get_status();
-        // printf("\n%d\t", status);
-        ses_output[sample_idx] = SES_get_filtered_output();
-        printf("\n%d\t%d", i,ses_output[sample_idx]);
-        // if(status == 3) printf("<=========");
-        i++;
-
-        if(i == 1000){
-            SES_set_control_reg(false);
-            break;
+        if( SES_get_status() == 3 ){
+            output = SES_get_filtered_output();
+            #ifdef PRINT_DURING_SAMPLE
+                printf("\n%d\t%d", sample_idx, ses_output[sample_idx]);
+            #endif
+            #ifdef PLOT_GRAPH
+                graph[last_point]   = ' ';
+                graph[last_point+1] = ' ';
+                point = output/1000;
+                graph[point]        = '*';
+                graph[point+1]      = 0;
+                last_point = point;
+                printf("\n%s", graph);
+            #endif
+            #ifdef PLOT_AT_END
+                ses_output[sample_idx] = output;
+                if(sample_idx == SAMPLE_LENGHT_N){
+                    SES_set_control_reg(false);
+                    break;
+                }
+            #endif
+            sample_idx++;
         }
-
-
-
-        // if (detect_rising_edge(status, 0b10)) {
-
-        //     sample_idx = tick_idx/SES_DECIM_FACTOR;
-
-        //     #ifdef PLOT_GRAPH
-        //     graph[last_point]   = ' ';
-        //     graph[last_point+1] = ' ';
-        //     point = ses_output[sample_idx]/500;
-        //     graph[point]        = '*';
-        //     graph[point+1]      = 0;
-        //     last_point = point;
-        //     // printf("\n%d %d %d", point, ses_output[sample_idx], GRAPH_POINT_WIDTH);
-        //     printf("\n%s", graph);
-        //     #else
-        //     printf("\n%d\t%d", sample_idx, ses_output[sample_idx]);
-        //     #endif
-
-        //     if( sample_idx >= SAMPLE_LENGHT_N ){
-        //         SES_set_control_reg(false);
-        //         break;
-        //     }
-        // }
     }
 
-    // for( sample_idx =0; sample_idx < SAMPLE_LENGHT_N; sample_idx++ ){
-    //     printf("\n%d, %d", sample_idx, ses_output[sample_idx]);
-    // }
+    #ifdef PRINT_AT_END
+    for( sample_idx =0; sample_idx < SAMPLE_LENGHT_N; sample_idx++ ){
+        printf("\n%d\t%d", sample_idx, ses_output[sample_idx]);
+    }
+    #endif
 
-    PRINTF("Failed.\n");
+    PRINTF("\nSuccess!\n");
     return EXIT_FAILURE;
 }
