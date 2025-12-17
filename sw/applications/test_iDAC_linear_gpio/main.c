@@ -11,11 +11,12 @@
 #include "cheep.h"
 #include "pad_control.h"
 #include "pad_control_regs.h"
+#include "REFs_ctrl.h"
 #include "gpio.h"
 
-#define COOL_DOWN_SEC 1
+#define COOL_DOWN_MSEC 250
 #define SYS_FCLK_HZ 10000000
-#define COOL_DOWN_CC (SYS_FCLK_HZ*COOL_DOWN_SEC)
+#define COOL_DOWN_CC ((SYS_FCLK_HZ/1000)*COOL_DOWN_MSEC)
 
 #define GPIO_DSM_IN 5
 #define GPIO_DSM_CLK 4
@@ -96,6 +97,7 @@ int main() {
     iDAC1_calibrate(16);
     iDAC2_calibrate(16);
 
+    REFs_calibrate( 0, IREF1 );
 
     enable_timer_interrupt();   // Enable the timer machine-level interrupt
     timer_irq_enable();
