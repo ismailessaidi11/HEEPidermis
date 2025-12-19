@@ -6,16 +6,35 @@ import numpy as np
 import matplotlib.pyplot as plt
 import re
 
-header = open("output.txt").readline().strip()
-x, y = np.loadtxt("output.txt", delimiter="\t", skiprows=1, unpack=True)
+def plot(xs, ys):
+    plt.figure(figsize=(7,2))
+    plt.title(header)
+    plt.plot(xs, ys, marker="o")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.show()
 
-plt.figure()
-plt.title(header)
-plt.plot(x, y, marker="o")
-# plt.scatter(x, y)
-plt.xlabel("x")
-plt.ylabel("y")
-plt.show()
+with open("../../../uart.log") as f:
+    xs, ys = [], []
+    header = None
+
+    for line in f:
+        line = line.strip()
+        if not line: continue
+
+        if line.startswith("fclk:"):
+            if xs:
+                plot(xs, ys)
+                xs, ys = [], []
+            header = line
+        else:
+            a, b = line.split()
+            xs.append(float(a))
+            ys.append(float(b))
+
+    if xs: plot(xs, ys)
+
+
 
 #In[]
 

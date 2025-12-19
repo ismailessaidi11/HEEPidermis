@@ -16,7 +16,6 @@
 
 
 #define SYS_FCLK_HZ 10000000
-#define DSM_CLK_TOGGLE_CC 500   // ⚠️ NEEDS TO BE < 512
 
 #define GPIO_DATA 2
 #define GPIO_CLK 3
@@ -26,7 +25,7 @@
 #define SES_WINDOW_SIZE     6
 #define SES_DECIM_FACTOR    32
 
-#define SES_SYSCLK_DIVISION (DSM_CLK_TOGGLE_CC*2)
+#define SES_SYSCLK_DIVISION 1000  // ⚠️ NEEDS TO BE < 1024
 #define DSM_F_S             (SYS_FCLK_HZ/SES_SYSCLK_DIVISION)
 #define SES_ACTIVATED_STAGES 0b001111
 
@@ -47,6 +46,7 @@
 // #define PLOT_GRAPH               // ⚠️ BE CAREFUL! YOU WILL INTRODUCE ALIASING!
 // #define PRINT_DURING_SAMPLE      // ⚠️ BE CAREFUL! YOU WILL INTRODUCE ALIASING!
 #define PRINT_AT_END
+#define LOOP_FOREVER 0
 
 /* By default, printfs are activated for FPGA and disabled for simulation. */
 #define PRINTF_IN_FPGA  1
@@ -89,7 +89,7 @@ void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
     tick_idx ++;
     timer_cycles_init();
     timer_irq_enable();
-    timer_arm_start(DSM_CLK_TOGGLE_CC);
+    timer_arm_start(SES_SYSCLK_DIVISION);
     return;
 }
 
@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
 
     timer_cycles_init();
     timer_irq_enable();
-    timer_arm_start(DSM_CLK_TOGGLE_CC);
+    timer_arm_start(SES_SYSCLK_DIVISION);
 
     uint32_t i=0;
 
@@ -208,8 +208,12 @@ int main(int argc, char *argv[])
             #ifdef PRINT_AT_END
             ses_output[sample_idx] = output;
             if(sample_idx == SAMPLE_LENGHT_N){
-                SES_set_control_reg(false);
-                break;
+                #if LOOP_FOREVER
+                    sample_idx = 0;
+                #else
+                    SES_set_control_reg(false);
+                    break;
+                #endif
             }
             #endif
             sample_idx++;
