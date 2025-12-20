@@ -53,3 +53,5 @@ hw/vendor/x-heep/tb/ext_bus.sv
 !hw/vendor/analog-library/VCO/Verilog/phase_lut.hex
 
 
+# Decimated outputs of the DSM
+sw/applications/test_dsm_exploration/out*
