@@ -1,12 +1,17 @@
 #In[]:
-# Check the results
-#############################################################
+# Init
 
 %matplotlib widget
 import numpy as np
 import matplotlib.pyplot as plt
 import re
 import os
+
+
+
+#In[]:
+# Check the results
+#############################################################
 
 def finalize_block(header, xs, ys, rawname=False, plot=False):
 
@@ -162,8 +167,11 @@ plt.show()
 #In[]
 # Finer exploration heatmap
 #############################################################
+%matplotlib inline
 
 from collections import defaultdict
+
+plt.rcParams["font.family"] = "serif"
 
 # parse
 pat = re.compile(
@@ -208,12 +216,14 @@ im = plt.imshow(
     cmap="RdYlGn", vmin=0, vmax=50
 )
 plt.xticks(range(len(DF_vals)), DF_vals)
-plt.yticks(range(len(AS_vals)), AS_vals)
-plt.xlabel("DF")
-plt.ylabel("AS")
-plt.title("Metric heatmap (AS vs DF) - Wg=16, Ww=6")
+plt.yticks(range(len(AS_vals)), range(1,len(AS_vals)+1))
+plt.xlabel("Decimation Factor (DF)")
+plt.ylabel("Active stages (AS)")
+plt.title("SNDR for Wg=16, Ww=6")
 
-cax = plt.gcf().add_axes([0.92, 0.15, 0.03, 0.7])
-plt.colorbar(im, cax=cax, label="metric")
+cax = plt.gcf().add_axes([1, 0.15, 0.03, 0.7])
+plt.colorbar(im, cax=cax, label="SNDR")
 
+
+plt.tight_layout()
 plt.show()

@@ -102,7 +102,7 @@ int main() {
     enable_timer_interrupt();   // Enable the timer machine-level interrupt
     timer_irq_enable();
 
-    printf("here we go!\n");
+    printf("=== test iDAC linear gpio ===\n");
 
     timer_cycles_init();
     timer_start();

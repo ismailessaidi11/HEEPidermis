@@ -1,8 +1,10 @@
 // Copyright 2025 EPFL contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Author: David Mallasen
-// Description: Test application for the VCO counter in the VCO decoder
+// Author: Juan Sapriza
+// Related references:
+// Phase-domain LC - uses the phase of the oscillation: https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=8641302
+// IF-TEM - Performs integration in the analog domain, instead of time: https://arxiv.org/pdf/2202.02015
 
 #include "VCO_decoder.h"
 #include "pad_control.h"

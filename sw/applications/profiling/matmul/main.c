@@ -12,8 +12,8 @@
 
 #define ENABLE_PRINTF           0
 #define RETURN_ON_END           0
-#define GPIO_TOGGLE_ON_ERROR    1
-#define CHECK_ERRORS            1
+#define GPIO_TOGGLE_ON_ERROR    0
+#define CHECK_ERRORS            0
 
 
 #define GPIO_TOGGLE 0

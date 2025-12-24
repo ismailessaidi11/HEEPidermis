@@ -167,7 +167,7 @@ int main(int argc, char *argv[])
 
     static uint32_t ses_output [SAMPLE_LENGHT_N];
 
-    printf("\nhere we go!\n");
+    printf("\n=== Test DSM selfdrive ===\n");
     #ifdef PRINT_DURING_SAMPLE
     printf("fclk:%d Hz, Wg:%d,Ww:%d,DF:%d,AS:%d(%d,%d,%d,%d,%d,%d)",DSM_F_S,SES_WG,SES_WINDOW_SIZE,SES_DECIM_FACTOR,SES_ACTIVATED_STAGES,SES_GAIN_STAGE_0,SES_GAIN_STAGE_1,SES_GAIN_STAGE_2,SES_GAIN_STAGE_3,SES_GAIN_STAGE_4,SES_GAIN_STAGE_5 );
     #endif
