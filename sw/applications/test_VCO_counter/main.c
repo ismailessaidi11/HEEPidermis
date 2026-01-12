@@ -9,9 +9,12 @@
 #include "soc_ctrl.h"
 
 #define VCO_FS_HZ 1
-#define SYS_FCLK_HZ 10000000
+#define SYS_FCLK_HZ 200000
 #define VCO_UPDATE_CC (SYS_FCLK_HZ/VCO_FS_HZ)
 
+#define VCO_SUPPLY_FROM_LDO 1
+#define VCO_CAL_FROM_LDO_ADD_HZ    20
+#define VCO_CAL_FROM_LDO_ADD_uV    5700
 
 #define COMPUTE_AVG         0
 #define MOVING_AVG_WINDOW   10
@@ -29,7 +32,12 @@ void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
 
 
 uint32_t compute_freq_Hz( diff ){
-    return diff*VCO_FS_HZ;
+    uint32_t freq_Hz;
+    freq_Hz = diff*VCO_FS_HZ;
+    #if VCO_SUPPLY_FROM_LDO
+        freq_Hz += VCO_CAL_FROM_LDO_ADD_HZ;
+    #endif
+    return freq_Hz;
 }
 
 uint32_t interpolate_Vin_uV(uint32_t f_target) {
@@ -64,7 +72,12 @@ uint32_t interpolate_Vin_uV(uint32_t f_target) {
 
     // We multiply before dividing to keep precision.
     // Result fits in uint32_t because 20,000 * ~106,000 < 2^32
-    return v0 + ((delta_f_target * delta_v_table) / delta_f_table);
+    uint32_t result_uV = v0 + ((delta_f_target * delta_v_table) / delta_f_table);
+    #if VCO_SUPPLY_FROM_LDO
+        result_uV += VCO_CAL_FROM_LDO_ADD_uV;
+    #endif
+
+    return result_uV;
 }
 
 int main() {
@@ -93,7 +106,7 @@ int main() {
     enable_timer_interrupt();   // Enable the timer machine-level interrupt
     timer_irq_enable();
 
-    printf("=== Test VCO overflow ===\n");
+    printf("=== Test VCO counter ===\n");
 
     timer_cycles_init();
     timer_start();

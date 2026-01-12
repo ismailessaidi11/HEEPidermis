@@ -19,6 +19,10 @@
 #define IDAC_DEFAULT_CAL 0
 #define IREF_DEFAULT_CAL 255
 
+#define VCO_SUPPLY_FROM_LDO 1
+#define VCO_CAL_FROM_LDO_ADD_HZ    20
+#define VCO_CAL_FROM_LDO_ADD_uV    5700
+
 #define COMPUTE_AVG         0
 #define MOVING_AVG_WINDOW   10
 
@@ -35,7 +39,12 @@ void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
 
 
 uint32_t compute_freq_Hz( diff ){
-    return diff*VCO_FS_HZ;
+    uint32_t freq_Hz;
+    freq_Hz = diff*VCO_FS_HZ;
+    #if VCO_SUPPLY_FROM_LDO
+        freq_Hz += VCO_CAL_FROM_LDO_ADD_HZ;
+    #endif
+    return freq_Hz;
 }
 
 uint32_t interpolate_Vin_uV(uint32_t f_target) {
@@ -70,7 +79,10 @@ uint32_t interpolate_Vin_uV(uint32_t f_target) {
 
     // We multiply before dividing to keep precision.
     // Result fits in uint32_t because 20,000 * ~106,000 < 2^32
-    return v0 + ((delta_f_target * delta_v_table) / delta_f_table);
+    uint32_t result_uV = v0 + ((delta_f_target * delta_v_table) / delta_f_table);
+    #if VCO_SUPPLY_FROM_LDO
+        result_uV += VCO_CAL_FROM_LDO_ADD_uV;
+    #endif
 }
 
 uint32_t update_dac1(val){
