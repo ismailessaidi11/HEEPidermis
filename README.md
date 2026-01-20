@@ -45,8 +45,8 @@ For all HEEPidermis-specific documentation, please refer to the documentation be
   - [ΔΣ decimation (SES filter)](./docs/source/DBE/SES_filter.md)
 
 - **PCBs**
-- - [CHEEP-boards](./hw/vendor/cheep-boards/) - To program and provide power
-- - [Breakout board](./hw/vendor/breakout-board/) - To solder the cheep and connect it to the CHEEP-boards.
+  - [CHEEP-boards](./hw/vendor/cheep-boards/) - To program and provide power
+  - [Breakout board](./hw/vendor/breakout-board/) - To solder the cheep and connect it to the CHEEP-boards.
 
 - **Related documents**
   - [HEEPidermis](https://arxiv.org/abs/2509.04528)
