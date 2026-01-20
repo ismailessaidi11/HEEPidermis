@@ -44,6 +44,10 @@ For all HEEPidermis-specific documentation, please refer to the documentation be
   - [ΔΣ decimation (CIC filter)](./docs/source/DBE/CIC_filter.md)
   - [ΔΣ decimation (SES filter)](./docs/source/DBE/SES_filter.md)
 
+- **PCBs**
+- - [CHEEP-boards](./hw/vendor/cheep-boards/) - To program and provide power
+- - [Breakout board](./hw/vendor/breakout-board/) - To solder the cheep and connect it to the CHEEP-boards.
+
 - **Related documents**
   - [HEEPidermis](https://arxiv.org/abs/2509.04528)
   - [ΔΣ Decimation theory](https://ieeexplore.ieee.org/abstract/document/11044062)
@@ -74,6 +78,53 @@ Make sure the Conda environment is active:
      - Synopsys Design Compiler version 2020.09 or above
 
 You can follow the instructions on how to install these tools on the [X-HEEP documentation - Manual setup](https://x-heep.readthedocs.io/en/latest/GettingStarted/Setup.html#manual-setup).
+
+
+## Preparing the Boards
+
+The easiest way to test HEEPidermis is to use the [CHEEP-boards](./hw/vendor/cheep-boards/), which provide all the tools (sw and hardware) to supply power and program HEEPidermis.
+
+HEEPidermis is soldered (or placed on a socket) on the [breakout board](./hw/vendor/breakout-board/).
+
+After soldering everything, you also need to:
+
+### Connect chewing-gums
+
+The chewing-gum (CG) boards are small shields that are connected to the main board, and which can be used to provide power or reference voltages to HEEPidermis, and measure that consumption.
+
+| CG | Function | Nominal value | CG | Function | Nominal value |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 6 | DCORE VDD | 0.8 V | 7 | ACORE VDD | 1.2 V |
+| 5 | IO VDD | 1.8 V | 8 | iREF | Connect a source of 400 nA |
+| 4 | not used | - | 9 | REF VDD | 1.2 V |
+| 3 | not used | - | 10 | LDO VREF | 0.8 V |
+| 2 | not used | - | 11 | VCO VDD | 0.8 V |
+| 1 | not used | - | 12 | LDO VDD | 1.2 V |
+
+> _Note that the bottom three CGs on the picture below are not used, they are just used to inject voltages here and there with an external cable for testing._
+
+⚠️ Remember to solder a shunt resistor below the CG! ~10 Ω should do fine for the range 1-100 µW. Consider that the INA will amplify the drop by 1000-2000×, has an offset of some 10s µV, and it cannot output more than 3.3 V.
+
+<p align="center"><img src="./docs/img/HEEPidermis-on-board.png" width="1000"></p>
+
+### Connect jumpers and switches
+
+On the main board
+* Each CG has three jumpers. To control them with the trimmer, connect the jumper next to it towards its screw. Connect the jumper on the side away from the trimmer to turn the power on. Connect the jumper innermost to the main baord away from the test point to make the output go to the main board.
+* Connect the jumper for the IO VDD (next to CG 8) on 1.8 V
+* No need to connect any jumper next to the oscilaltor (bottom of the main board)
+
+On the breakout board there are several places where to connect jumpers to use the cheep on different configurations. Mainly, there are two rulers of pin headers around the cheep which can be used to connect or disconnect supplies. Many of them are short-circuited on both sides, so you just use the headers as test points or to inject a signal. The rest are marked with what would get to the cheep if you close the jumper. Additionally there are three-pin jumpers for you to choose what to supply the cheep with: an ideal supply coming from the main board's chewing gums, or a voltage/current coming from the on-cheep supplies.
+
+Check the table on [the breakout board's readme](./hw/vendor/cheep-boards/) to see what connects what.
+
+> ❗There are two pads on the bottom of the board that need to be short-circuited: They will connect the clock input to the cheep. You can select where to take the clock, if you have no clue what to do, put some solder tin on the two pair of pads that point to the main board to take the clock from there. Don't worry if you make a mistake and short a bit the other, it's not the end of the world.
+
+There is a pair of switches on the breakout board, to the left of the cheep. You can eiter solder the switches to select the boot mode, or you can short with tin them the mid-pin with the one closest to the cheep to only use JTAG mode (explained below).
+
+### Bug correction
+
+🪲 You need to cut the pin below the `value` pin (the outter most pin, in row 31 of the main board) in the connector to the main board or nothing will work, sorry.
 
 ## Programming the ASIC
 
@@ -139,7 +190,7 @@ make jtag_close
 
 ### Programming from the FLASH
 
-Testing...
+Testing... we seem to have a bug on the main board that prevents this from working 😬
 
 ### Programming through SPI
 
