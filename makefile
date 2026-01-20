@@ -137,6 +137,7 @@ REQS_XHEEP 	:= hw/vendor/x-heep/util/python-requirements.txt
 REQS_CHEEP 	:= util/cheep-python-requirements.txt
 ENV_NAME 	:= heepidermis
 
+CHEEP_BOARDS ?= hw/vendor/cheep-boards
 
 # ----- BUILD RULES ----- #
 
@@ -452,14 +453,9 @@ jtag_build:
 
 ## @section CHEEP boards control
 
-# Configure board sw stack
-.PHONY: board_config
-board_config:
-	ln -sfn $(CHEEP_BOARDS)/software_stack scripts/asic/cheep_boards_sw_stack
-
 # Configure PLL
 .PHONY: board_freq
-board_freq: board_config
+board_freq:
 	( cd scripts/asic; python3 board_set_pll_freq.py $(PLL_FREQ); cd -)
 
 ## @section Cleaning

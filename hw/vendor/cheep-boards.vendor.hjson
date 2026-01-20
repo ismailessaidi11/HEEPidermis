@@ -1,0 +1,14 @@
+// Copyright 2023 EPFL and Politecnico di Torino
+// Solderpad Hardware License, Version 2.1, see LICENSE.md for details
+// SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
+
+{
+  name: "cheep-boards",
+  target_dir: "cheep-boards",
+
+  upstream: {
+    url: "git@github.com:esl-epfl/CHEEP-boards.git",
+    rev: "26151bcc55d3376cb2ccd3cee64712960671f74d",
+  },
+
+}

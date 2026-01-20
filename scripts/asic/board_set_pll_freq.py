@@ -1,5 +1,5 @@
 import sys
-sys.path.append('./cheep_boards_sw_stack/python/')
+sys.path.append('../../hw/vendor/cheep-boards/software_stack/python/')
 
 from cheep import *
 from pyftdi.ftdi import Ftdi
