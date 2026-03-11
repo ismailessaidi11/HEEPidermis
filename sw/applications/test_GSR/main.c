@@ -9,6 +9,9 @@
 #include "soc_ctrl.h"
 #include "REFs_ctrl.h"
 #include "iDAC_ctrl.h"
+#include "x-heep.h"
+
+#define PRINTF_IN_SIM 0
 
 #define VCO_FS_HZ 1
 #define SYS_FCLK_HZ 10000000
