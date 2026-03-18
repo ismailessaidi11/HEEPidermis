@@ -124,27 +124,6 @@ def plot_fosc_model(VCO_model, mode="fit", ax=None, result=None, show_stats=True
         ax.set_xlim(200, 850)
     else:
         raise ValueError("mode must be either 'fit' or 'measurement'")
-        
-
-# def plot_fosc_model(ax, VCO_model, result):
-#     # ===== Panel 1: f_osc Model with measurement point =====
-#     vin_plot = VCO_model.params.vin_range
-#     fosc_plot = VCO_model.fosc_from_vin(vin_plot)
-    
-#     ax.scatter(VCO_model.vin_data, VCO_model.fosc_data, s=60, color='black', alpha=0.6, label='Measured data', zorder=5)
-#     ax.plot(vin_plot, fosc_plot, 'b-', linewidth=2.5, label='Piecewise polynomial model')
-    
-    
-#     if not np.isnan(result.vin_mV) and 225 <= result.vin_mV <= 820:
-#         ax.plot(result.vin_mV, result.f_osc_measured_kHz, 'r*', markersize=20, label=f'Measured: f={result.f_osc_measured_kHz:.0f} kHz', zorder=10)
-#         ax.axvline(result.vin_mV, color='r', linestyle='--', alpha=0.5)
-    
-#     ax.set_xlabel('V_in (mV)', fontsize=11)
-#     ax.set_ylabel('f_osc (kHz)', fontsize=11)
-#     ax.set_title('f_osc Model & Measurement', fontsize=12, fontweight='bold')
-#     ax.grid(True, alpha=0.3)
-#     ax.legend(fontsize=10)
-#     ax.set_xlim(200, 850)
 
 def plot_vin_text(ax, VCO_model, result): 
     # ===== Panel 2: V_in from f_osc measurement =====
@@ -212,10 +191,22 @@ def plot_dGdf(ax, result):
     ax.plot(result.i_dc_uA, result.dG_df_curve[np.argmin(np.abs(result.i_dc_range - result.i_dc_uA))], 'r*', 
             markersize=20, label=f'Current setting: {result.i_dc_uA:.2f} μA', zorder=5)
     ax.fill_between(result.i_dc_range, result.dG_df_curve, alpha=0.3, color='purple')
-
+    
+    ax.set_xlabel('i_dc (μA)', fontsize=11)
     ax.set_ylabel('G Tolerance [uS/kHz]', fontsize=11)
-    ax.set_title('Step 3: G Tolerance Analysis - How much does G vary with f_osc measurement error?', 
+    ax.set_title('Step 3: How much does G vary with f_osc measurement error?', 
                     fontsize=12, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=10)
+
+def plot_delta_G(ax, result, fs_Hz):
+    ax.plot(result.i_dc_range, result.delta_G_curve, 'orange', linewidth=3, label='Estimated ΔG (uS)')
+    ax.fill_between(result.i_dc_range, result.delta_G_curve, alpha=0.3, color='orange')
+    ax.plot(result.i_dc_uA, result.delta_G, 'r*', markersize=20, label=f'Current setting: {result.i_dc_uA:.2f} μA', zorder=5)
+    
+    ax.set_xlabel('i_dc (μA)', fontsize=11)
+    ax.set_ylabel('Estimated ΔG (uS)', fontsize=11)
+    ax.set_title(f'Step 4: Conductance Resolution vs Bias Current at fs = {fs_Hz} Hz', fontsize=12, fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=10)
 
@@ -254,62 +245,3 @@ def print_analysis(VCO_model, result):
         print(f"   Highest resolution at: {result.i_dc_range[min_tolerance_idx]:.2f} μA ({result.dG_df_curve[min_tolerance_idx]:.6f} uS/kHz)")
     
     print("\n" + "="*70 + "\n")
-
-def plot_VCO_model(VCO_model):
-    vin_data = VCO_model.vin_data
-    fosc_data = VCO_model.fosc_data
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Generate smooth curve using model
-    vin_smooth = np.linspace(225, 820, 300)
-    fosc_fit = VCO_model.fosc_from_vin(vin_smooth)
-    fosc_points = VCO_model.fosc_from_vin(vin_data)
-    
-    ax.scatter(vin_data, fosc_data, s=80, color='black', alpha=0.7, label='Measured data', zorder=5)
-    ax.plot(vin_smooth, fosc_fit, 'purple', linewidth=2.5, label='Piecewise polynomial fit')
-    
-    # Show residuals
-    residuals = fosc_data - fosc_points
-    ax.scatter(vin_data, residuals, s=50, color='orange', alpha=0.6, label='Residuals')
-    ax.axhline(y=0, color='k', linestyle='-', linewidth=0.5)
-            
-    ax.set_xlabel('V_in (mV)', fontsize=12)
-    ax.set_ylabel('f_osc (kHz) / Residuals', fontsize=12)
-    ax.set_title('Piecewise Polynomial Model Fit', fontsize=13)
-    ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=10)
-    ax.set_xlim(200, 850)
-    
-    plt.tight_layout()
-    plt.show()
-    
-    # Print model statistics
-    print(f"\n{'='*60}")
-    print(f"Piecewise Polynomial Model")
-    print(f"{'='*60}")
-    print(f"Piecewise threshold: {VCO_model.piecewise_threshold:.2f} mV")
-    print(f"\nPolynomial coefficients (active region only):")
-    a, b, c = VCO_model.popt_poly
-    print(f"  a = {a:.6f}")
-    print(f"  b = {b:.4f}")
-    print(f"  c = {c:.3f}")
-    print(f"\nEquation: f_osc = {a:.6f} × V_in² + {b:.4f} × V_in + {c:.3f}")
-    print(f"          (valid for V_in ≥ {VCO_model.piecewise_threshold:.2f} mV)")
-    
-    # Calculate fit statistics
-    residuals = fosc_data - VCO_model.fosc_from_vin(vin_data)
-    rmse = np.sqrt(np.mean(residuals**2))
-    mae = np.mean(np.abs(residuals))
-    print(f"\nFit Statistics (all data):")
-    print(f"  RMSE: {rmse:.2f} kHz")
-    print(f"  MAE:  {mae:.2f} kHz")
-    
-    # Statistics for active region only
-    active_mask = vin_data >= VCO_model.piecewise_threshold
-    residuals_active = residuals[active_mask]
-    rmse_active = np.sqrt(np.mean(residuals_active**2))
-    mae_active = np.mean(np.abs(residuals_active))
-    print(f"\nFit Statistics (active region only, V_in ≥ {VCO_model.piecewise_threshold:.2f} mV):")
-    print(f"  RMSE: {rmse_active:.2f} kHz")
-    print(f"  MAE:  {mae_active:.2f} kHz")
-    print(f"{'='*60}\n")
