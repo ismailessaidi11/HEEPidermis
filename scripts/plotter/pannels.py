@@ -189,7 +189,7 @@ def plot_dGdf(ax, result):
 
     ax.plot(result.i_dc_range, result.dG_df_curve, 'purple', linewidth=3, label='G Tolerance: dG/d(f_osc) [uS/kHz]')
     ax.plot(result.i_dc_uA, result.dG_df_curve[np.argmin(np.abs(result.i_dc_range - result.i_dc_uA))], 'r*', 
-            markersize=20, label=f'Current setting: {result.i_dc_uA:.2f} μA', zorder=5)
+            markersize=20, label=f'Current point ({result.i_dc_uA:.2f} μA, {result.dG_df:.4f} uS)', zorder=5)
     ax.fill_between(result.i_dc_range, result.dG_df_curve, alpha=0.3, color='purple')
     
     ax.set_xlabel('i_dc (μA)', fontsize=11)
@@ -199,16 +199,57 @@ def plot_dGdf(ax, result):
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=10)
 
-def plot_delta_G(ax, result, fs_Hz):
-    ax.plot(result.i_dc_range, result.delta_G_curve, 'orange', linewidth=3, label='Estimated ΔG (uS)')
-    ax.fill_between(result.i_dc_range, result.delta_G_curve, alpha=0.3, color='orange')
-    ax.plot(result.i_dc_uA, result.delta_G, 'r*', markersize=20, label=f'Current setting: {result.i_dc_uA:.2f} μA', zorder=5)
+def plot_delta_G(ax, model, result, fs_Hz):
+    fs_ref = [0.5, 1.0, 5.0, 10.0]
     
+    for fs in fs_ref:
+        delta_G_curve = model.delta_G(result.vin_mV, result.i_dc_range, fs_Hz=fs)
+        style = '--' if fs != fs_Hz else '-'
+        lw = 1.5 if fs != fs_Hz else 3
+        alpha = 0.6 if fs != fs_Hz else 1.0
+        ax.plot(
+            result.i_dc_range,
+            delta_G_curve,
+            linestyle=style,
+            linewidth=lw,
+            alpha=alpha,
+            label=f'f_s = {fs:g} Hz'
+        )
+
+    current_curve = model.delta_G(result.vin_mV, result.i_dc_range, fs_Hz=fs_Hz)
+    current_delta_G = model.delta_G(result.vin_mV, result.i_dc_uA, fs_Hz=fs_Hz)
+
+    ax.fill_between(result.i_dc_range, current_curve, alpha=0.2)
+    ax.plot(result.i_dc_uA, current_delta_G, 'r*', markersize=18,
+            label=f'Current point ({result.i_dc_uA:.2f} μA, {current_delta_G:.4f} uS)',
+            zorder=5)
+
     ax.set_xlabel('i_dc (μA)', fontsize=11)
     ax.set_ylabel('Estimated ΔG (uS)', fontsize=11)
-    ax.set_title(f'Step 4: Conductance Resolution vs Bias Current at fs = {fs_Hz} Hz', fontsize=12, fontweight='bold')
+    ax.set_title('ΔG vs i_dc for different sampling frequencies', fontsize=12, fontweight='bold')
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=10)
+    ax.legend(fontsize=9)
+
+def plot_delta_G_heatmap(ax, model, result, fs_Hz):
+    fs_vals = np.linspace(0.5, 20, 100)
+    idc_vals = result.i_dc_range
+
+    Z = np.array([
+        model.delta_G(result.vin_mV, idc_vals, fs_Hz=fs)
+        for fs in fs_vals
+    ])
+
+    im = ax.imshow(
+        Z,
+        aspect='auto',
+        origin='lower',
+        extent=[idc_vals.min(), idc_vals.max(), fs_vals.min(), fs_vals.max()]
+    )
+
+    ax.plot(result.i_dc_uA, fs_Hz, 'r*', markersize=14)
+    ax.set_xlabel('i_dc (μA)')
+    ax.set_ylabel('f_s (Hz)')
+    ax.set_title('ΔG(i_dc, f_s)')
 
 def print_analysis(VCO_model, result):
     print("\n" + "="*70)

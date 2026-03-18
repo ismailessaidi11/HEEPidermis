@@ -51,6 +51,7 @@ class WorkflowResult:
     R_kohm: float
     i_dc_range: np.ndarray
     G_curve: np.ndarray
+    dG_df: float
     dG_df_curve: np.ndarray
     delta_G: float
     delta_G_curve: np.ndarray
@@ -70,6 +71,8 @@ def compute_workflow(model, f_osc_measured_kHz, i_dc_uA, fs_Hz):
 
     # Scalar values at the selected operating point
     delta_G = model.delta_G(vin_mV, i_dc_uA, fs_Hz=fs_Hz)
+    dG_df = model.dG_df(vin_mV, i_dc_uA)
+
 
     return WorkflowResult(
         f_osc_measured_kHz=f_osc_measured_kHz,
@@ -79,6 +82,7 @@ def compute_workflow(model, f_osc_measured_kHz, i_dc_uA, fs_Hz):
         R_kohm=R_kohm,
         i_dc_range=i_dc_range,
         G_curve=G_curve,
+        dG_df=dG_df,
         dG_df_curve=dG_df_curve,
         delta_G=delta_G,
         delta_G_curve=delta_G_curve,
