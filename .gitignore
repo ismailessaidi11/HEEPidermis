@@ -13,7 +13,6 @@ build/
 *.dis
 *.cache
 *.jou
-*.csv
 *.str
 
 #generated files
