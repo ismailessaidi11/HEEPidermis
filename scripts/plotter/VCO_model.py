@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import numpy as np
+import pandas as pd
 from scipy.optimize import curve_fit
 
 
@@ -295,11 +296,14 @@ class VCOParams:
 
 #         return vin_smooth, delta_G
 class VCO_Model:
-    def __init__(self, vin_data, fosc_data, params=None):
+    def __init__(self, data_path, params=None):
         self.params = params if params is not None else VCOParams()
 
-        self.vin_data = np.asarray(vin_data, dtype=float)
-        self.fosc_data = np.asarray(fosc_data, dtype=float)
+        df = pd.read_csv(data_path)
+        self.vin_data = np.asarray(df.Vin, dtype=float)
+        self.fosc_data = np.asarray(df.fosc, dtype=float)
+        self.pvco_data = np.asarray(df.P_VCO, dtype=float)
+        self.pcnt_data = np.asarray(df.P_counter, dtype=float)
         self.vdd = float(self.params.vdd)
 
         nonzero_indices = np.where(self.fosc_data > 0)[0]
@@ -495,3 +499,19 @@ class VCO_Model:
             Ts_s=Ts_s,
             avg_window=avg_window
         )
+    
+    def skin_power_uW(self, vin_mV, i_dc_uA):
+        vin_arr = np.asarray(vin_mV, dtype=float)
+        i_arr = np.asarray(i_dc_uA, dtype=float)
+
+        vin_V = vin_arr * 1e-3
+        i_dc_A = i_arr * 1e-6
+        power_skin_uW = i_dc_A * (self.vdd - vin_V) * 1e6
+
+
+        invalid = (vin_arr < self.piecewise_threshold) | np.isnan(vin_arr) | np.isnan(i_arr)
+        power_skin_uW = np.where(invalid, np.nan, power_skin_uW)
+
+        return power_skin_uW.item() if np.isscalar(vin_mV) and np.isscalar(i_dc_uA) else power_skin_uW
+    
+    

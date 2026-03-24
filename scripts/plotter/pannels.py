@@ -251,14 +251,14 @@ def plot_delta_G_heatmap(ax, model, result, fs_Hz):
     ax.set_ylabel('f_s (Hz)')
     ax.set_title('ΔG(i_dc, f_s)')
 
-def print_analysis(VCO_model, result):
+def print_analysis(model, result):
     print("\n" + "="*70)
     print("MEASUREMENT WORKFLOW ANALYSIS")
     print("="*70)
     print(f"\n1. MEASUREMENT INPUT:")
     print(f"   f_osc (measured):  {result.f_osc_measured_kHz:.1f} kHz")
     print(f"   Model used:        Piecewise Polynomial")
-    print(f"   Threshold:         {VCO_model.piecewise_threshold:.2f} mV")
+    print(f"   Threshold:         {model.piecewise_threshold:.2f} mV")
     
     print(f"\n2. EXTRACTED V_IN:")
     if not np.isnan(result.vin_mV):
@@ -286,3 +286,44 @@ def print_analysis(VCO_model, result):
         print(f"   Highest resolution at: {result.i_dc_range[min_tolerance_idx]:.2f} μA ({result.dG_df_curve[min_tolerance_idx]:.6f} uS/kHz)")
     
     print("\n" + "="*70 + "\n")
+
+def plot_power(ax, model, result):
+    vin = result.vin_mV
+
+    ax.scatter(model.vin_data, model.pvco_data, label="P_VCO", s=50)
+    ax.scatter(model.vin_data, model.pcnt_data, label="P_Counter", s=50)
+
+    # Current operating Vin
+    ax.axvline(vin, color='r', linestyle='--', alpha=0.6, label=f'Current V_in = {vin:.1f} mV')
+
+    # Nearest measured point
+    idx = np.argmin(np.abs(model.vin_data - vin))
+    vin_nearest = model.vin_data[idx]
+    pvco = model.pvco_data[idx]
+    pcnt = model.pcnt_data[idx]
+
+    ax.plot(vin_nearest, pvco, 'o', markersize=10, color='red', zorder=5)
+    ax.plot(vin_nearest, pcnt, 's', markersize=10, color='red', zorder=5)
+
+    text = (
+        f"Nearest measured V_in = {vin_nearest:.1f} mV\n"
+        f"P_VCO = {pvco:.3f} µW\n"
+        f"P_Counter = {pcnt:.3f} µW\n"
+        f"P_current_injection = {result.skin_power_uW:.3f} µW\n"
+        f"P_Total = {pvco + pcnt + result.skin_power_uW:.3f} µW"
+    )
+
+    ax.text(
+        0.02, 0.98, text,
+        transform=ax.transAxes,
+        va='top',
+        ha='left',
+        fontsize=10,
+        bbox=dict(boxstyle='round', facecolor='white', alpha=0.85)
+    )
+
+    ax.set_xlabel("V_in (mV)", fontsize=11)
+    ax.set_ylabel("Power (µW)", fontsize=11)
+    ax.set_title("Power Measurements vs V_in", fontsize=12, fontweight="bold")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=9)
