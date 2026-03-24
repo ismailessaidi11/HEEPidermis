@@ -14,7 +14,7 @@ class WorkflowResult:
     dG_df_curve: np.ndarray
     delta_G: float
     delta_G_curve: np.ndarray
-    skin_power_uW: float
+    idc_power_uW: float
 
 def compute_workflow(model, f_osc_measured_kHz, i_dc_uA, fs_Hz):
     vin_mV = model.vin_from_fosc(f_osc_measured_kHz)
@@ -34,7 +34,7 @@ def compute_workflow(model, f_osc_measured_kHz, i_dc_uA, fs_Hz):
     dG_df = model.dG_df(vin_mV, i_dc_uA)
 
     # Power consumption
-    skin_power_uW = model.skin_power_uW(vin_mV, i_dc_uA)
+    idc_power_uW = model.idc_power_uW(vin_mV, i_dc_uA)
 
     return WorkflowResult(
         f_osc_measured_kHz=f_osc_measured_kHz,
@@ -48,5 +48,5 @@ def compute_workflow(model, f_osc_measured_kHz, i_dc_uA, fs_Hz):
         dG_df_curve=dG_df_curve,
         delta_G=delta_G,
         delta_G_curve=delta_G_curve,
-        skin_power_uW=skin_power_uW
+        idc_power_uW=idc_power_uW
     )

@@ -500,18 +500,17 @@ class VCO_Model:
             avg_window=avg_window
         )
     
-    def skin_power_uW(self, vin_mV, i_dc_uA):
+    def idc_power_uW(self, vin_mV, i_dc_uA):
         vin_arr = np.asarray(vin_mV, dtype=float)
         i_arr = np.asarray(i_dc_uA, dtype=float)
 
         vin_V = vin_arr * 1e-3
         i_dc_A = i_arr * 1e-6
-        power_skin_uW = i_dc_A * (self.vdd - vin_V) * 1e6
+        power_idc_uW = i_dc_A * vin_V * 1e6
 
 
         invalid = (vin_arr < self.piecewise_threshold) | np.isnan(vin_arr) | np.isnan(i_arr)
-        power_skin_uW = np.where(invalid, np.nan, power_skin_uW)
+        power_idc_uW = np.where(invalid, np.nan, power_idc_uW)
 
-        return power_skin_uW.item() if np.isscalar(vin_mV) and np.isscalar(i_dc_uA) else power_skin_uW
-    
-    
+        return power_idc_uW.item() if np.isscalar(vin_mV) and np.isscalar(i_dc_uA) else power_idc_uW
+

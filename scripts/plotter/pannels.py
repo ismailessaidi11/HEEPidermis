@@ -309,8 +309,8 @@ def plot_power(ax, model, result):
         f"Nearest measured V_in = {vin_nearest:.1f} mV\n"
         f"P_VCO = {pvco:.3f} µW\n"
         f"P_Counter = {pcnt:.3f} µW\n"
-        f"P_current_injection = {result.skin_power_uW:.3f} µW\n"
-        f"P_Total = {pvco + pcnt + result.skin_power_uW:.3f} µW"
+        f"P_current_injection = {result.idc_power_uW:.3f} µW\n"
+        f"P_Total = {pvco + pcnt + result.idc_power_uW:.3f} µW"
     )
 
     ax.text(
