@@ -114,6 +114,8 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1):
 
     deltaG_vals = []
     ptot_vals = []
+    p_idcs = []
+    p_vco_cnt = []
 
     for i_dc in i_vals:
         vin_mV = model.vin_from_G(G_uS, i_dc)
@@ -131,13 +133,20 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1):
         p_idc = model.idc_power_uW(vin_mV, i_dc)
         p_vco = model.pvco_from_vin(vin_mV)
         p_cnt = model.pcnt_from_vin(vin_mV)
+        p_idcs.append(p_idc)
+        p_vco_cnt.append(p_vco + p_cnt)
         ptot_vals.append(p_idc + p_vco + p_cnt)
 
     deltaG_vals = np.asarray(deltaG_vals, dtype=float) * 1000  # Convert to nS
+    p_idcs = np.asarray(p_idcs, dtype=float)
+    p_vco_cnt = np.asarray(p_vco_cnt, dtype=float)
     ptot_vals = np.asarray(ptot_vals, dtype=float)
 
+    max_i_dc = model.i_dc_max(result.input.G_uS)
+    i_vals = i_vals[i_vals <= max_i_dc] 
+    i_vals = i_vals[:len(i_vals)]  # Limit to first half for better visualization
     # Plot Delta_G on primary axis (steelblue)
-    ax.plot(i_vals, deltaG_vals, linewidth=2.5, label=r'$\Delta G$', color='steelblue')
+    ax.plot(i_vals, deltaG_vals[:len(i_vals)], linewidth=2.5, label=r'$\Delta G$', color='steelblue')
     ax.plot(result.input.i_dc_uA, result.output.delta_G_uS * 1000, 'r*', markersize=16, zorder=5)
 
     ax.set_xlabel(r'$i_{dc}$ (μA)')
@@ -148,7 +157,9 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1):
 
     # Plot Power on secondary axis (coral)
     ax2 = ax.twinx()
-    ax2.plot(i_vals, ptot_vals, linestyle='--', linewidth=2.0, label=r'$P_{TOT}$', color='coral')
+    ax2.plot(i_vals, p_idcs[:len(i_vals)], linestyle=':', linewidth=2.0, label=r'$P_{iDC}$', color='lightcoral')
+    ax2.plot(i_vals, p_vco_cnt[:len(i_vals)], linestyle='-.', linewidth=2.0, label=r'$P_{VCO} + P_{CNT}$', color='darkorange')
+    ax2.plot(i_vals, ptot_vals[:len(i_vals)], linestyle='--', linewidth=2.0, label=r'$P_{TOT}$', color='coral')
     ax2.plot(result.input.i_dc_uA, result.output.P_tot_uW, 'ko', markersize=6, zorder=5)
     ax2.set_ylabel(r'$P_{TOT}$ (μW)', color='coral')
     ax2.tick_params(axis='y', labelcolor='coral')
@@ -156,3 +167,26 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1):
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labels1 + labels2, fontsize=9, loc='best')
+
+def plot_forward_output_summary(ax, result, model):
+    ax.axis("off")
+    max_i_dc = model.i_dc_max(result.input.G_uS)
+
+    txt = (
+        f"ΔG:        {result.output.delta_G_uS * 1000:.4f} nS\n"
+        f"P_VCO_CNT:     {result.output.P_cnt_uW + result.output.P_vco_uW:.4f} μW\n"
+        f"P_idc:     {result.output.P_idc_uW:.4f} μW\n"
+        f"P_TOT:     {result.output.P_tot_uW:.4f} μW\n"
+        f"─────────────\n"
+        f"i_dc_max: {max_i_dc:.4f} μA\nG×(V_dd-V_min)"
+    )
+        
+    ax.text(
+        0.5, 0.5, txt,
+        transform=ax.transAxes,
+        ha='center', va='center',
+        fontsize=12,
+        family='monospace',
+        bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.25)
+    )
+    ax.set_title("Outputs values", fontweight='bold')

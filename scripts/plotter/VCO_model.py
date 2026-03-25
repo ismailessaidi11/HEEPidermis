@@ -20,7 +20,7 @@ class VCOParams:
 
     idc_min: float = 0.1
     idc_max: float = 10.0
-    idc_points: int = 100
+    idc_points: int = 300
 
     sweep_points: int = 200
 
@@ -35,11 +35,13 @@ class VCOParams:
         return np.linspace(self.idc_min, self.idc_max, self.idc_points)
 
 class VCO_Model:
-    def __init__(self, data_folder, params=None):
+    def __init__(self, data_folder, params=None, representation="poly"):
         self.params = params if params is not None else VCOParams()
-    
+        self.representation = representation.lower()
+        
         VCO_data_path = os.path.join(data_folder, "VCO_data.csv")
         df = pd.read_csv(VCO_data_path)
+
         self.vin_data = np.asarray(df.Vin, dtype=float)
         self.fosc_data = np.asarray(df.fosc, dtype=float)
         self.pvco_data = np.asarray(df.P_VCO, dtype=float)
@@ -53,9 +55,15 @@ class VCO_Model:
         self.piecewise_threshold = float(self.vin_data[nonzero_indices[0]])
 
         mask = self.vin_data >= self.piecewise_threshold
-        vin_active = self.vin_data[mask]
-        fosc_active = self.fosc_data[mask]
-        
+        self.vin_active = self.vin_data[mask]
+        self.fosc_active = self.fosc_data[mask]
+        if np.any(np.diff(self.fosc_active) <= 0):
+            raise ValueError(
+                "LUT inversion requires fosc_active to be strictly increasing."
+            )
+        # Precompute the derivative LUT for dV/dF to speed up delta_G calculations
+        self.df_dv_lut = self._build_lut_derivative(self.vin_active, self.fosc_active)
+
         self.interp_adev = None
         if self.params.allen_dev:
             adev_path = os.path.join(data_folder, "VCO variability - summary N.csv")
@@ -64,12 +72,30 @@ class VCO_Model:
             self.interp_adev = RegularGridInterpolator(
                 (v_n, taus), grid, bounds_error=False, fill_value=None
             )
-        self.popt_poly, _ = curve_fit(self.polynomial_model, vin_active, fosc_active)
+        self.popt_poly, _ = curve_fit(self.polynomial_model, self.vin_active, self.fosc_active)
 
     @staticmethod
     def polynomial_model(x, a, b, c):
         return a * x**2 + b * x + c
 
+    def _build_lut_derivative(self, x, y):
+        x = np.asarray(x, dtype=float)
+        y = np.asarray(y, dtype=float)
+
+        dydx = np.empty_like(y, dtype=float)
+
+        if len(x) < 2:
+            raise ValueError("Need at least two LUT points to compute derivative.")
+
+        # One-sided differences at boundaries
+        dydx[0] = (y[1] - y[0]) / (x[1] - x[0])
+        dydx[-1] = (y[-1] - y[-2]) / (x[-1] - x[-2])
+
+        # Central differences inside
+        dydx[1:-1] = (y[2:] - y[:-2]) / (x[2:] - x[:-2])
+
+        return dydx
+    
     def _clean_csv_generic(self, path):
         df = pd.read_csv(path)
         for col in df.columns:
@@ -116,13 +142,30 @@ class VCO_Model:
         return vin_V, i_dc_A, denom
 
     def _df_dV_mV(self, vin_mV):
-        a, b, _ = self.popt_poly
         vin_arr = np.asarray(vin_mV, dtype=float)
-        return np.where(
-            vin_arr < self.piecewise_threshold,
-            0.0,
-            2 * a * vin_arr + b
-        )
+
+        if self.representation == "poly":
+            a, b, _ = self.popt_poly
+            out = np.where(
+                vin_arr < self.piecewise_threshold,
+                0.0,
+                2 * a * vin_arr + b
+            )
+
+        elif self.representation == "lut":
+            out = np.interp(
+                vin_arr,
+                self.vin_active,
+                self.df_dv_lut,
+                left=0.0,
+                right=self.df_dv_lut[-1]
+            )
+            out = np.where(vin_arr < self.piecewise_threshold, 0.0, out)
+
+        else:
+            raise ValueError(f"Unknown representation: {self.representation}")
+
+        return out.item() if np.isscalar(vin_mV) else out
 
     def _invalid_mask(self, vin_2d, denom, extra_mask=None):
         invalid = (
@@ -154,52 +197,89 @@ class VCO_Model:
     def fosc_from_vin(self, vin_mV):
         """
         Piecewise polynomial model:
-            f_osc = 0 if V_in < piecewise_threshold, else polynomial
+            if representation is "poly":
+                f_osc = 0 if V_in < piecewise_threshold, else polynomial 
+            else: LUT interpolation if representation is "lut".
         """
         vin_arr = np.asarray(vin_mV, dtype=float)
-        a, b, c = self.popt_poly
-        poly_val = np.maximum(a * vin_arr**2 + b * vin_arr + c, 0.0)
-        out = np.where(vin_arr < self.piecewise_threshold, 0.0, poly_val)
+
+        if self.representation == "poly":
+            a, b, c = self.popt_poly
+            poly_val = np.maximum(a * vin_arr**2 + b * vin_arr + c, 0.0)
+            out = np.where(vin_arr < self.piecewise_threshold, 0.0, poly_val)
+
+        elif self.representation == "lut":
+            out = np.interp(
+                vin_arr,
+                self.vin_active,
+                self.fosc_active,
+                left=0.0,
+                right=self.fosc_active[-1]
+            )
+            out = np.where(vin_arr < self.piecewise_threshold, 0.0, out)
+
+        else:
+            raise ValueError(f"Unknown representation: {self.representation}")
+
         return out.item() if np.isscalar(vin_mV) else out
 
     def vin_from_fosc(self, fosc_kHz):
-        """
-        Invert the piecewise model to extract V_in from f_osc.
-        For f_osc <= 0, returns the threshold as a lower bound.
-        """
         fosc_arr = np.asarray(fosc_kHz, dtype=float)
-        a, b, c = self.popt_poly
 
-        out = np.full_like(fosc_arr, np.nan, dtype=float)
+        if self.representation == "poly":
+            a, b, c = self.popt_poly
+            out = np.full_like(fosc_arr, np.nan, dtype=float)
 
-        # Below or at zero frequency -> below threshold / lower bound
-        zero_mask = fosc_arr <= 0
-        out[zero_mask] = self.piecewise_threshold
+            zero_mask = fosc_arr <= 0
+            out[zero_mask] = self.piecewise_threshold
 
-        # Invert quadratic only for positive fosc
-        pos_mask = fosc_arr > 0
-        if np.any(pos_mask):
-            fpos = fosc_arr[pos_mask]
-            disc = b**2 - 4 * a * (c - fpos)
+            pos_mask = fosc_arr > 0
+            if np.any(pos_mask):
+                fpos = fosc_arr[pos_mask]
+                disc = b**2 - 4 * a * (c - fpos)
 
-            valid_disc = disc >= 0
-            v_candidates = np.full_like(fpos, np.nan, dtype=float)
+                valid_disc = disc >= 0
+                v_candidates = np.full_like(fpos, np.nan, dtype=float)
 
-            # Two roots
-            sqrt_disc = np.sqrt(np.maximum(disc, 0.0))
-            v1 = (-b + sqrt_disc) / (2 * a)
-            v2 = (-b - sqrt_disc) / (2 * a)
+                sqrt_disc = np.sqrt(np.maximum(disc, 0.0))
+                v1 = (-b + sqrt_disc) / (2 * a)
+                v2 = (-b - sqrt_disc) / (2 * a)
 
-            # Keep the physically valid root above threshold
-            cand1_ok = (v1 >= self.piecewise_threshold) & valid_disc
-            cand2_ok = (v2 >= self.piecewise_threshold) & valid_disc
+                cand1_ok = (v1 >= self.piecewise_threshold) & valid_disc
+                cand2_ok = (v2 >= self.piecewise_threshold) & valid_disc
 
-            v_candidates[cand1_ok] = v1[cand1_ok]
+                v_candidates[cand1_ok] = v1[cand1_ok]
 
-            replace_mask = np.isnan(v_candidates) & cand2_ok
-            v_candidates[replace_mask] = v2[replace_mask]
+                replace_mask = np.isnan(v_candidates) & cand2_ok
+                v_candidates[replace_mask] = v2[replace_mask]
 
-            out[pos_mask] = v_candidates
+                out[pos_mask] = v_candidates
+
+        elif self.representation == "lut":
+            out = np.full_like(fosc_arr, np.nan, dtype=float)
+
+            zero_mask = fosc_arr <= 0
+            out[zero_mask] = self.piecewise_threshold
+
+            pos_mask = fosc_arr > 0
+            if np.any(pos_mask):
+                fmin = self.fosc_active[0]
+                fmax = self.fosc_active[-1]
+
+                fpos = fosc_arr[pos_mask]
+                valid = (fpos >= fmin) & (fpos <= fmax)
+
+                vin_vals = np.full_like(fpos, np.nan, dtype=float)
+                vin_vals[valid] = np.interp(
+                    fpos[valid],
+                    self.fosc_active,
+                    self.vin_active
+                )
+
+                out[pos_mask] = vin_vals
+
+        else:
+            raise ValueError(f"Unknown representation: {self.representation}")
 
         return out.item() if np.isscalar(fosc_kHz) else out
     
@@ -274,12 +354,13 @@ class VCO_Model:
         k_kHz_per_mV = self._df_dV_mV(vin_mV)
 
         # Convert k from kHz/mV to Hz/mV
-        k_Hz_per_mV = k_kHz_per_mV * 1e3
+        k_Hz_per_mV = np.asarray(k_kHz_per_mV, dtype=float) * 1e3
+        df_osc_Hz = np.asarray(df_osc_Hz, dtype=float)
 
         with np.errstate(divide='ignore', invalid='ignore'):
             out = df_osc_Hz / k_Hz_per_mV
 
-        return out.item() if np.ndim(out) == 0 else out
+        return out.item() if out.ndim == 0 else out
 
     def delta_G_uS(self, vin_mV, i_dc_uA, fs_Hz, variance=1, avg_window=1):
         G_uS = self.conductance(vin_mV, i_dc_uA)

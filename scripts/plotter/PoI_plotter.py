@@ -130,7 +130,7 @@ def forward_plotter(model, variance=1, avg_window=1):
     )
 
     i_dc_slider = FloatSlider(
-        value=1.0, min=0.1, max=10.0, step=0.1,
+        value=1.0, min=0.1, max=10.0, step=0.01,
         description='i_dc (μA):',
         continuous_update=True,
         layout=Layout(width='300px')
@@ -202,7 +202,8 @@ def forward_plotter(model, variance=1, avg_window=1):
         plot_forward_df_components(fig.add_subplot(gs[1, 0]), result)
         plot_forward_outputs(fig.add_subplot(gs[1, 1]), result)
         plot_forward_tradeoff(fig.add_subplot(gs[2, 0]), model, result,
-                              variance=variance, avg_window=avg_window)
+                              variance=active_variance, avg_window=avg_window)
+        plot_forward_output_summary(fig.add_subplot(gs[2, 1]), result, model)
 
         fig.suptitle(
             r'Forward workflow: $(G, i_{dc}, f_s)\rightarrow(V_{in}, f_{osc}, \Delta f, \Delta V_{in})\rightarrow(\Delta G, P)$',
