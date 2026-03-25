@@ -1,8 +1,107 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-import numpy as np
-import matplotlib.pyplot as plt
+from ipywidgets import FloatSlider, VBox, HBox, Layout, HTML
+from IPython.display import display
+
+from pannels import *
+from workflow import compute_workflow
+
+
+def PoI_plotter(VCO_model):
+        # Controls
+    f_osc_slider = FloatSlider(
+        value=820, min=0, max=1200, step=10,
+        description='f_osc (kHz):',
+        continuous_update=True,
+        layout=Layout(width='300px')
+    )
+    i_dc_slider = FloatSlider(
+        value=1.0, min=0.1, max=10, step=0.1,
+        description='i_dc (μA):',
+        continuous_update=True,
+        layout=Layout(width='300px')
+    )
+    fs_Hz_slider = FloatSlider(
+        value=1, min=0.5, max=20, step=0.5,
+        description='fs (Hz):',
+        continuous_update=True,
+        layout=Layout(width='300px')
+    )
+
+    controls = VBox(
+        [
+            HTML("<h4>Controls</h4>"),
+            f_osc_slider,
+            i_dc_slider,
+            fs_Hz_slider,
+        ],
+        layout=Layout(
+            width='320px',
+            padding='10px',
+            border='1px solid #ddd'
+        )
+    )
+
+    controls_wrapper = VBox(
+        [controls],
+        layout=Layout(
+            width='340px',
+            min_width='340px',
+            height='850px',
+            justify_content='center'
+        )
+    )
+
+
+    # Create figure ONCE
+    fig = plt.figure(figsize=(12, 10), constrained_layout=True)
+    gs = fig.add_gridspec(3, 2)
+
+    axes = {
+        'fosc':        fig.add_subplot(gs[0, 0]),
+        'vin':         fig.add_subplot(gs[0, 1]),
+        'conductance': fig.add_subplot(gs[1, 0]),
+        'df_osc':      fig.add_subplot(gs[1, 1]),
+        'delta_g':     fig.add_subplot(gs[2, 0]),
+        'power':       fig.add_subplot(gs[2, 1]),
+    }
+
+    fig.suptitle(
+        'Integrated Measurement Workflow: $f_{osc} \\rightarrow V_{in} \\rightarrow G$',
+        fontsize=14, fontweight='bold'
+    )
+
+    out = fig.canvas  
+
+    def update(change=None):
+        result = compute_workflow(
+            VCO_model,
+            f_osc_slider.value,
+            i_dc_slider.value,
+            fs_Hz_slider.value
+        )
+
+        for ax in axes.values():
+            ax.cla()
+
+        plot_fosc_model(VCO_model, mode="measurement", ax=axes['fosc'],        result=result)
+        plot_vin_text(                                  axes['vin'],  VCO_model, result)
+        plot_conductance_text(                          axes['conductance'],     result)
+        plot_df_osc_components(                        axes['df_osc'], VCO_model, result, fs_Hz_slider.value)
+        plot_delta_G(                                  axes['delta_g'], VCO_model, result, fs_Hz_slider.value)
+        plot_power(                                    axes['power'],  VCO_model, result)
+
+        fig.canvas.draw_idle()
+        print_analysis(VCO_model, result)
+
+
+    for slider in [f_osc_slider, i_dc_slider, fs_Hz_slider]:
+        slider.observe(update, names='value')
+
+    update()  # initial draw
+
+    display(HBox([controls_wrapper, out], layout=Layout(align_items='center')))
 
 
 def plot_fosc_model(VCO_model, mode="fit", ax=None, result=None, show_stats=True):
@@ -83,8 +182,8 @@ def plot_fosc_model(VCO_model, mode="fit", ax=None, result=None, show_stats=True
             print(f"  RMSE: {rmse_active:.2f} kHz")
             print(f"  MAE:  {mae_active:.2f} kHz")
             print(f"{'='*60}\n")
-        plt.tight_layout()
-        plt.show()
+        # plt.tight_layout()
+        # plt.show()
 
     elif mode == "measurement":
         vin_plot = VCO_model.params.vin_range
@@ -199,14 +298,58 @@ def plot_dGdf(ax, result):
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=10)
 
+def plot_df_osc_components(ax, model, result, fs_Hz):
+    df_adev_curve = model.df_osc_adev_Hz(result.vin_mV, fs_Hz)
+    df_sampling_curve = np.full_like(result.i_dc_range, result.df_osc_sampling_Hz, dtype=float)
+    df_total_curve = np.full_like(result.i_dc_range, result.df_osc_Hz, dtype=float)
+
+    ax.plot(
+        result.i_dc_range,
+        df_adev_curve if np.ndim(df_adev_curve) > 0 else np.full_like(result.i_dc_range, df_adev_curve),
+        color='purple',
+        linewidth=2.5,
+        label=r'$\Delta f_{osc,\mathrm{adev}}$ [Hz]'
+    )
+    ax.plot(
+        result.i_dc_range,
+        df_sampling_curve,
+        color='orange',
+        linewidth=2.5,
+        linestyle='--',
+        label=r'$\Delta f_{osc,\mathrm{sampling}}$ [Hz]'
+    )
+    ax.plot(
+        result.i_dc_range,
+        df_total_curve,
+        color='black',
+        linewidth=3,
+        label=r'$\Delta f_{osc}$ [Hz]'
+    )
+
+    ax.plot(
+        result.i_dc_uA,
+        result.df_osc_Hz,
+        'r*',
+        markersize=18,
+        label=f'Current point ({result.i_dc_uA:.2f} μA, {result.df_osc_Hz:.3g} Hz)',
+        zorder=5
+    )
+
+    ax.set_xlabel('i_dc (μA)', fontsize=11)
+    ax.set_ylabel('Frequency error (Hz)', fontsize=11)
+    ax.set_title(r'Frequency error contributions vs $i_{dc}$', fontsize=12, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=9)
+
 def plot_delta_G(ax, model, result, fs_Hz):
     fs_ref = [0.5, 1.0, 5.0, 10.0]
-    
+
     for fs in fs_ref:
-        delta_G_curve = model.delta_G(result.vin_mV, result.i_dc_range, fs_Hz=fs)
+        delta_G_curve = model.delta_G_uS(result.vin_mV, result.i_dc_range, fs_Hz=fs)
         style = '--' if fs != fs_Hz else '-'
         lw = 1.5 if fs != fs_Hz else 3
         alpha = 0.6 if fs != fs_Hz else 1.0
+
         ax.plot(
             result.i_dc_range,
             delta_G_curve,
@@ -216,16 +359,18 @@ def plot_delta_G(ax, model, result, fs_Hz):
             label=f'f_s = {fs:g} Hz'
         )
 
-    current_curve = model.delta_G(result.vin_mV, result.i_dc_range, fs_Hz=fs_Hz)
-    current_delta_G = model.delta_G(result.vin_mV, result.i_dc_uA, fs_Hz=fs_Hz)
-
-    ax.fill_between(result.i_dc_range, current_curve, alpha=0.2)
-    ax.plot(result.i_dc_uA, current_delta_G, 'r*', markersize=18,
-            label=f'Current point ({result.i_dc_uA:.2f} μA, {current_delta_G:.4f} uS)',
-            zorder=5)
+    ax.fill_between(result.i_dc_range, result.delta_G_curve, alpha=0.2)
+    ax.plot(
+        result.i_dc_uA,
+        result.delta_G_uS,
+        'r*',
+        markersize=18,
+        label=f'Current point ({result.i_dc_uA:.2f} μA, {result.delta_G_uS:.4f} μS)',
+        zorder=5
+    )
 
     ax.set_xlabel('i_dc (μA)', fontsize=11)
-    ax.set_ylabel('Estimated ΔG (uS)', fontsize=11)
+    ax.set_ylabel('Estimated ΔG (μS)', fontsize=11)
     ax.set_title('ΔG vs i_dc for different sampling frequencies', fontsize=12, fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=9)
@@ -235,7 +380,7 @@ def plot_delta_G_heatmap(ax, model, result, fs_Hz):
     idc_vals = result.i_dc_range
 
     Z = np.array([
-        model.delta_G(result.vin_mV, idc_vals, fs_Hz=fs)
+        model.delta_G_uS(result.vin_mV, idc_vals, fs_Hz=fs)
         for fs in fs_vals
     ])
 
@@ -251,41 +396,108 @@ def plot_delta_G_heatmap(ax, model, result, fs_Hz):
     ax.set_ylabel('f_s (Hz)')
     ax.set_title('ΔG(i_dc, f_s)')
 
-def print_analysis(model, result):
-    print("\n" + "="*70)
-    print("MEASUREMENT WORKFLOW ANALYSIS")
-    print("="*70)
-    print(f"\n1. MEASUREMENT INPUT:")
-    print(f"   f_osc (measured):  {result.f_osc_measured_kHz:.1f} kHz")
-    print(f"   Model used:        Piecewise Polynomial")
-    print(f"   Threshold:         {model.piecewise_threshold:.2f} mV")
-    
-    print(f"\n2. EXTRACTED V_IN:")
-    if not np.isnan(result.vin_mV):
-        print(f"   V_in:              {result.vin_mV:.3f} mV")
-    else:
-        print(f"   V_in:              ✗ OUT OF RANGE")
-    
-    print(f"\n3. CONDUCTANCE CALCULATION:")
-    print(f"   i_dc (applied):    {result.i_dc_uA:.3f} μA")
-    if not np.isnan(result.G_uS):
-        print(f"   G:                 {result.G_uS:.6f} uS")
-        print(f"   R:                 {result.R_kohm:.4f} kΩ")
-    else:
-        print(f"   G:                 ✗ CANNOT CALCULATE")
-    # G tolerance analysis
-    print(f"\n4. G TOLERANCE ANALYSIS:")
-    current_dG_df = result.dG_df_curve[np.argmin(np.abs(result.i_dc_range - result.i_dc_uA))]
-    print(f"   dG/d(f_osc):       {current_dG_df:.6f} uS/kHz")
-    print(f"   Interpretation:    1 kHz error in f_osc → {current_dG_df:.6f} uS error in G")
+    return im
 
-    max_tolerance_idx = np.argmax(result.dG_df_curve)
-    print(f"\n   Lowest resolution at: {result.i_dc_range[max_tolerance_idx]:.2f} μA ({result.dG_df_curve[max_tolerance_idx]:.6f} uS/kHz)")
-    min_tolerance_idx = np.argmin(np.array(result.dG_df_curve)[np.array(result.dG_df_curve) > 0]) if any(t > 0 for t in result.dG_df_curve) else 0
-    if result.dG_df_curve[min_tolerance_idx] > 0:
-        print(f"   Highest resolution at: {result.i_dc_range[min_tolerance_idx]:.2f} μA ({result.dG_df_curve[min_tolerance_idx]:.6f} uS/kHz)")
+def plot_dVin(ax, result):
+    dvin_curve = np.full_like(result.i_dc_range, result.dVin_mV, dtype=float)
+
+    ax.plot(
+        result.i_dc_range,
+        dvin_curve,
+        color='teal',
+        linewidth=3,
+        label=r'$\Delta V_{in}$ [mV]'
+    )
+    ax.plot(
+        result.i_dc_uA,
+        result.dVin_mV,
+        'r*',
+        markersize=18,
+        label=f'Current point ({result.i_dc_uA:.2f} μA, {result.dVin_mV:.4f} mV)',
+        zorder=5
+    )
+
+    ax.set_xlabel('i_dc (μA)', fontsize=11)
+    ax.set_ylabel(r'$\Delta V_{in}$ (mV)', fontsize=11)
+    ax.set_title(r'Equivalent input voltage error', fontsize=12, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=9)
     
-    print("\n" + "="*70 + "\n")
+def print_analysis(model, result):
+    print("\n" + "=" * 70)
+    print("MEASUREMENT WORKFLOW ANALYSIS")
+    print("=" * 70)
+
+    print("\n1. MEASUREMENT INPUT")
+    print(f"   f_osc (measured):      {result.f_osc_measured_kHz:.3f} kHz")
+    print(f"   Model used:            Piecewise Polynomial")
+    print(f"   Threshold:             {model.piecewise_threshold:.3f} mV")
+
+    print("\n2. EXTRACTED V_IN")
+    if not np.isnan(result.vin_mV):
+        print(f"   V_in:                  {result.vin_mV:.6f} mV")
+    else:
+        print("   V_in:                  ✗ OUT OF RANGE")
+
+    print("\n3. CONDUCTANCE CALCULATION")
+    print(f"   i_dc (applied):        {result.i_dc_uA:.6f} μA")
+    if not np.isnan(result.G_uS):
+        print(f"   G:                     {result.G_uS:.9f} μS")
+        print(f"   R:                     {result.R_kohm:.6f} kΩ")
+    else:
+        print("   G:                     ✗ CANNOT CALCULATE")
+
+    print("\n4. FREQUENCY ERROR TERMS")
+    print(f"   df_osc_adev_Hz:        {np.asarray(result.df_osc_adev_Hz).squeeze()}")
+    print(f"   df_osc_sampling_Hz:    {np.asarray(result.df_osc_sampling_Hz).squeeze()}")
+    print(f"   df_osc_Hz (max):       {np.asarray(result.df_osc_Hz).squeeze()}")
+
+    print("\n5. INPUT-REFERRED VOLTAGE ERROR")
+    print(f"   dVin_mV:               {np.asarray(result.dVin_mV).squeeze()}")
+
+    print("\n6. CONDUCTANCE SENSITIVITY")
+    print(f"   delta_G_uS:            {np.asarray(result.delta_G_uS).squeeze()}")
+    print("   Interpretation:        minimum detectable conductance change at the operating point")
+
+    print("\n7. CURVE DEBUGGING")
+    print(f"   i_dc_range shape:      {np.shape(result.i_dc_range)}")
+    print(f"   G_curve shape:         {np.shape(result.G_curve)}")
+    print(f"   delta_G_curve shape:   {np.shape(result.delta_G_curve)}")
+
+    n_show = min(5, len(result.i_dc_range))
+    print(f"\n   First {n_show} points of G_curve:")
+    for i in range(n_show):
+        print(
+            f"     i_dc={result.i_dc_range[i]:8.4f} μA   "
+            f"G={result.G_curve[i]:12.6f} μS"
+        )
+
+    print(f"\n   First {n_show} points of delta_G_curve:")
+    for i in range(n_show):
+        print(
+            f"     i_dc={result.i_dc_range[i]:8.4f} μA   "
+            f"delta_G={result.delta_G_curve[i]:12.6e} μS"
+        )
+
+    idx = int(np.argmin(np.abs(result.i_dc_range - result.i_dc_uA)))
+    print("\n8. OPERATING-POINT CHECK AGAINST CURVES")
+    print(f"   Closest i_dc index:    {idx}")
+    print(f"   Closest i_dc value:    {result.i_dc_range[idx]:.6f} μA")
+    print(f"   G_curve[idx]:          {result.G_curve[idx]:.9f} μS")
+    print(f"   delta_G_curve[idx]:    {result.delta_G_curve[idx]:.9e} μS")
+
+    if np.all(np.isnan(result.delta_G_curve)):
+        print("\n9. WARNING")
+        print("   delta_G_curve contains only NaN values.")
+    else:
+        valid = np.asarray(result.delta_G_curve, dtype=float)
+        valid = valid[~np.isnan(valid)]
+        if valid.size > 0:
+            print("\n9. DELTA_G CURVE SUMMARY")
+            print(f"   min(delta_G_curve):    {np.min(valid):.9e} μS")
+            print(f"   max(delta_G_curve):    {np.max(valid):.9e} μS")
+
+    print("\n" + "=" * 70 + "\n")
 
 def plot_power(ax, model, result):
     vin = result.vin_mV
