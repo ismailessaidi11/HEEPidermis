@@ -14,8 +14,8 @@ import os
 class VCOParams:
     vdd: float = 0.8
 
-    vin_min: float = 225.0
-    vin_max: float = 820.0
+    vin_min_mV: float = 330.0
+    vin_max_mV: float = 800.0
     vin_points: int = 300
 
     idc_min: float = 0.1
@@ -28,7 +28,7 @@ class VCOParams:
 
     @property
     def vin_range(self):
-        return np.linspace(self.vin_min, self.vin_max, self.vin_points)
+        return np.linspace(self.vin_min_mV, self.vin_max_mV, self.vin_points)
 
     @property
     def i_dc_range(self):
@@ -202,6 +202,19 @@ class VCO_Model:
             out[pos_mask] = v_candidates
 
         return out.item() if np.isscalar(fosc_kHz) else out
+    
+    def vin_from_G(self, G_uS, i_dc_uA):
+        G_arr = np.asarray(G_uS, dtype=float) * 1e-6
+        i_arr = np.asarray(i_dc_uA, dtype=float) * 1e-6
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            vin_V = self.vdd - i_arr / G_arr
+
+        vin_mV = vin_V * 1e3
+        invalid = (G_arr <= 0) | np.isnan(G_arr) | np.isnan(i_arr)
+        vin_mV = np.where(invalid, np.nan, vin_mV)
+
+        return vin_mV.item() if np.ndim(vin_mV) == 0 else vin_mV
 
     def vdd_mV(self):
         return self.vdd * 1e3
@@ -218,42 +231,6 @@ class VCO_Model:
 
         return self._restore_shape(G_uS, vin_scalar, idc_scalar)
 
-    # def dG_df(self, vin_mV, i_dc_uA):
-    #     _, _, vin_2d, i_2d, vin_scalar, idc_scalar = self._prepare_grid(vin_mV, i_dc_uA)
-    #     _, i_dc_A, denom = self._vin_idc_terms(vin_2d, i_2d)
-
-    #     df_dV_mV = self._df_dV_mV(vin_2d)
-
-    #     with np.errstate(divide='ignore', invalid='ignore'):
-    #         dG_dV = i_dc_A / (denom ** 2)
-    #         dG_dV_uS_per_mV = dG_dV * 1e3
-    #         dG_df = dG_dV_uS_per_mV / df_dV_mV
-
-    #     invalid = self._invalid_mask(vin_2d, denom, extra_mask=(df_dV_mV == 0)) | np.isnan(i_2d)
-    #     dG_df = np.where(invalid, np.nan, dG_df)
-
-    #     return self._restore_shape(dG_df, vin_scalar, idc_scalar)
-
-    # def dG_df_curve(self, vin_min=None):
-    #     return self._evaluate_over_vin_sweep(self.dG_df, vin_min=vin_min)
-
-    # def df_osc_adev_Hz(self, vin_mV, fs_Hz):
-    #     vin_arr = np.atleast_1d(np.asarray(vin_mV, dtype=float))
-    #     fs_arr = np.atleast_1d(np.asarray(fs_Hz, dtype=float))
-
-    #     vin_V = vin_arr * 1e-3
-    #     tau = np.clip(1.0 / fs_arr, 0.1, 5.0)
-
-    #     vin_V, tau = np.broadcast_arrays(vin_V, tau)
-
-    #     f = np.asarray(self.fosc_from_vin(vin_arr), dtype=float)
-    #     f, _ = np.broadcast_arrays(f, tau)
-
-    #     query_pts = np.stack([vin_V.ravel(), tau.ravel()], axis=-1)
-    #     adev = self.interp_adev(query_pts).reshape(vin_V.shape)
-
-    #     f_err = f * adev
-    #     return f_err.item() if np.ndim(f_err) == 0 or f_err.size == 1 else f_err
     def df_osc_adev_Hz(self, vin_mV, fs_Hz):
         if self.interp_adev is None:
             fs_arr = np.asarray(fs_Hz, dtype=float)
@@ -359,4 +336,15 @@ class VCO_Model:
         power_idc_uW = np.where(invalid, np.nan, power_idc_uW)
 
         return power_idc_uW.item() if np.isscalar(vin_mV) and np.isscalar(i_dc_uA) else power_idc_uW
+    
+    def pvco_from_vin(self, vin_mV):
+        return np.interp(vin_mV, self.vin_data, self.pvco_data)
 
+    def pcnt_from_vin(self, vin_mV):
+        return np.interp(vin_mV, self.vin_data, self.pcnt_data)
+    
+    def kvco_kHz_per_mV(self, vin_mV):
+        return self._df_dV_mV(vin_mV)
+    
+    def i_dc_max(self, G_uS):
+        return min(float(G_uS * (self.vdd_mV() - self.params.vin_min_mV) / 1000), self.params.idc_max)
