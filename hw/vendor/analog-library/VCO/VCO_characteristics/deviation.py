@@ -72,7 +72,7 @@ for ax, title in zip(axes, titles):
 
 axes[2].legend(title="Input Voltage", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='x-small', ncol=2)
 plt.tight_layout()
-plt.savefig('figs/vco_stability_report.png')
+plt.savefig('figs/vco_stability_report.png', dpi=600)
 
 
 #In[]:
@@ -120,6 +120,7 @@ colours = ["black", "gray", "lightgray"]
 
 adev_results = []
 ire_results = []
+quant_results = []
 
 for i, col in enumerate(df_n.columns):
     data = df_n[col].dropna().values
@@ -129,11 +130,21 @@ for i, col in enumerate(df_n.columns):
     scaling_factor = f_means[i] / np.abs(kvco[i]) if kvco[i] != 0 else np.nan
     ires = adevs * scaling_factor
 
+    fquant = 1/selected_taus
+    vquant = fquant/np.abs(kvco[i]) if kvco[i] != 0 else np.nan
+    quant_results.append(vquant)
+
     adev_results.append(adevs)
     ire_results.append(ires)
 
 adev_results = np.array(adev_results) # (Voltages, Taus)
 ire_results = np.array(ire_results)   # (Voltages, Taus)
+
+quant_results = np.array(quant_results)   # (Voltages, Taus)
+
+
+
+
 
 # Plotting
 plt.rcParams['font.family'] = 'serif'
@@ -150,21 +161,23 @@ if 0:
     plt.grid(True, which="both", ls="-", alpha=0.3)
     plt.legend()
     plt.tight_layout()
-    plt.savefig('figs/adev_vs_vin_only.png')
+    plt.savefig('figs/adev_vs_vin_only.svg')
 
 # Plot 2: IRE (V) vs Vin
 plt.figure(figsize=(6, 3))
 for j, tau in enumerate(selected_taus):
     plt.plot(voltages*1e3, ire_results[:, j], 'o-', markersize=4,label=f'$\\tau = {tau}s$',c=colours[j], zorder=len(selected_taus)-j)
+    plt.plot(voltages*1e3, quant_results[:, j], c=colours[j],linestyle='--')
+
 plt.yscale('log')
 plt.xlim(200,850)
-plt.xlabel('Input Voltage $V_{in}$ (mV)')
+plt.xlabel('Input Voltage (mV)')
 plt.ylabel('Input Referred Error (V)')
-plt.title('From Allan Deviation using 1σ of inter-sample variance')
+plt.title('― From Allan Deviation using 1σ of inter-sample variance\n--- From frequency quantization error', fontsize=9, loc='left')
 plt.grid(True, which="both", ls="-", alpha=0.3)
 plt.legend()
 plt.tight_layout()
-plt.savefig('figs/ire_vs_vin_only.png')
+plt.savefig('figs/ire_vs_vin.svg')
 
 # Output some diagnostic data
 print("Voltages:", voltages)
