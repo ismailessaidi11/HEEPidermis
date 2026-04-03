@@ -14,10 +14,12 @@
 
 // 8 MHz needed to coordinate with DSM
 
-// make board_freq PLL_FREQ=8000000
-// make uart UART_TERMINAL=gnome UART_BAUD=20480
-// make jtag_build PROJECT=dsm/extdriven_exploration
-// make jtag_run
+/*
+make board_freq PLL_FREQ=8000000
+make jtag_open UART_TERMINAL=gnome UART_BAUD=20480
+make jtag_build PROJECT=dsm/extdriven_exploration
+make jtag_run
+*/
 
 #define SYS_FCLK_HZ         8000000
 
@@ -30,7 +32,7 @@
 
 #define GPIO_LED 0
 
-// #define SES
+#define SES
 
 #ifdef SES
   #define FILTER_NAME "SES"
