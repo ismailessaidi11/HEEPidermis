@@ -14,7 +14,7 @@
 #include "timer_sdk.h"
 #include "soc_ctrl.h"
 
-#define OVF_CNT 100000
+#define OVF_CNT 10000
 
 #define GPIO_DIR    3
 #define GPIO_XING   2
@@ -69,10 +69,10 @@ int main() {
     VCO_set_refresh_rate(1);
 
     printf("=== test VCO overflow ===\n");
-    gpio_write(GPIO_XING,   0);
+    gpio_write(GPIO_XING,   1);
     while(1){
         count = VCOp_get_coarse();
-        if( count - last_count >= OVF_CNT){
+        if( count >= OVF_CNT){
             gpio_write(GPIO_XING,   1);
             for (int i = 0 ; i < 5000 ; i++) asm volatile ("nop");
             gpio_write(GPIO_XING,   0);

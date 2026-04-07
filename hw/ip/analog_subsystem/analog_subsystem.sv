@@ -11,6 +11,7 @@
 module analog_subsystem #(
     parameter real supply_uV = 800_000
 ) (
+    input logic                                      clk_i,
     input logic                                      idac1_enable_i,       // Enable signal (active high)
     input logic [idac_pkg::IdacCalibrationWidth-1:0] idac1_calibration_i,  // Calibration control (5-bit)
     input logic [    idac_pkg::IdacCurrentWidth-1:0] idac1_current_i,      // Digital input code (8-bit)
@@ -68,10 +69,10 @@ module analog_subsystem #(
       .DAC_IOUT_int_nA(iDAC2_IOUT_int_nA)
   );
 
-  resistor #(
-      .CHANGE_RATE_HZ(100000)
-  ) rskin (
-      .refresh(vco_refresh_i),
+  // wire resistor_refresh /* verilator public */;
+
+  resistor rskin (
+      .refresh(clk_i),
       .r_ohm  (resistance_O)
   );
 

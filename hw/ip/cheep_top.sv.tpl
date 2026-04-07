@@ -343,6 +343,7 @@ ${pad.core_v_mini_mcu_bonding}
   // Analog subsystem
   // ------------------------
   analog_subsystem u_analog_subsystem (
+    .clk_i(system_clk),
     .idac1_enable_i       (idac1_enable),
     .idac1_calibration_i  (idac1_calibration),
     .idac1_current_i      (idac1_current),

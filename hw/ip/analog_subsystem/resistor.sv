@@ -11,14 +11,16 @@
 
 module resistor #(
     string FILE_NAME      = "../../../hw/ip/analog_subsystem/conductance.txt",
-    real   CHANGE_RATE_HZ = 100.0
+    real   CHANGE_RATE_HZ = 1_000_000,
+    int     line_start = 500_000,
+    int     line_end = 600_000
 ) (
     input  logic refresh,
     output real  r_ohm
 );
 
   // scaling: one code LSB in Siemens
-  localparam real G_LSB = 100e-6 / (2.0 ** 16);  // 100 µS full scale
+  localparam real G_LSB = 1e-12;  // 1 pS per code
   localparam real R_MAX_R = 1.0e12;
   localparam int unsigned STEP_NS = (CHANGE_RATE_HZ > 0.0) ? int'(1.0e9 / CHANGE_RATE_HZ) : 32'h7fffffff;
 
@@ -27,6 +29,8 @@ module resistor #(
   real g_siemens;
 
   real r_table[$];
+  int current_line = 1; // Track the current line number
+
 
   // time bookkeeping
   longint unsigned last_step_ns;
@@ -38,14 +42,33 @@ module resistor #(
       $fatal(1, "Cannot open %s", FILE_NAME);
     end
 
+
     r_table.delete();
-    while (!$feof(
-        fd
-    )) begin
+
+    while (!$feof(fd)) begin
+      // Attempt to read the next value
       if ($fscanf(fd, "%d", g_code) == 1) begin
-        g_siemens = g_code * G_LSB;
-        if (g_siemens <= 0.0) r_table.push_back(R_MAX_R);
-        else r_table.push_back(1.0 / g_siemens);
+
+        // Only process and add to table if within the specified range
+        if (current_line >= line_start && current_line <= line_end) begin
+          g_siemens = g_code * G_LSB;
+
+          if (g_siemens <= 0.0) begin
+            // Safety check: handle empty table if line_start is the very first line
+            if (r_table.size() > 0)
+              r_table.push_back(r_table[r_table.size()-1]);
+            else
+              r_table.push_back(0.0); // Or a suitable default
+          end else begin
+            r_table.push_back(1.0 / g_siemens);
+          end
+        end
+
+        // Increment line counter after every successful read
+        current_line++;
+
+        // Optimization: stop reading if we've passed the end line
+        if (current_line > line_end) break;
       end
     end
     $fclose(fd);

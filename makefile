@@ -76,7 +76,7 @@ FIRMWARE			= $(ROOT_DIR)/build/sw/app/main.hex
 LINKER 				= flash_load
 endif
 VCD_MODE			?= 0 # QuestaSim-only - 0: no dump, 1: dump always active, 2: dump triggered by GPIO 0
-MAX_CYCLES			?= 1200000
+MAX_CYCLES			?= 10000000
 FUSESOC_FLAGS		?=
 FUSESOC_ARGS		?=
 
@@ -121,7 +121,7 @@ PLL_FREQ ?= 10000000
 UART_BAUD := $(shell echo "$(PLL_FREQ) / 390.625" | bc | xargs printf "%.0f")
 UART_TERMINAL ?= xterm
 UART_PORT = /dev/serial/by-id/usb-FTDI_Quad_RS232-HS-if02-port0
-PICO_FLAGS = -b $(UART_BAUD) --echo --imap lfcrlf --omap crcrlf --flow n
+PICO_FLAGS = -b $(UART_BAUD) --echo --imap lfcrlf --omap crcrlf --flow n -g uart.log
 XTERM_CMD = xterm -hold -e "picocom $(PICO_FLAGS) $(UART_PORT)"
 GNOME_CMD = gnome-terminal -- bash -c "picocom $(PICO_FLAGS) $(UART_PORT)"
 

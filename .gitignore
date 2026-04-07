@@ -14,6 +14,8 @@ build/
 *.cache
 *.jou
 *.str
+*.csv
+*.pid
 
 #generated files
 tb/tb_util.svh
