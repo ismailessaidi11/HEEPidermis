@@ -54,6 +54,3 @@ hw/vendor/x-heep/tb/ext_bus.sv
 
 # Decimated outputs of the DSM
 sw/applications/test_dsm_exploration/out*
-
-# keep the data files for plotting
-!scripts/plotter/data/*.csv
