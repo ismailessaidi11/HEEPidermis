@@ -107,21 +107,22 @@ def plot_forward_outputs(ax, result):
     ax.set_title("Output metrics")
     ax.grid(True, axis='y', alpha=0.3)
 
-def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1):
+def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1, reverse_result=None):
     G_uS = result.input.G_uS
     fs_Hz = result.input.fs_Hz
-    i_vals = model.params.i_dc_range
+    max_i_dc = model.i_dc_max(result.input.G_uS)
 
-    deltaG_vals = []
+    i_vals = model.params.i_dc_range
+    i_vals = i_vals[i_vals <= max_i_dc] 
+
+    deltaG_vals_uS = []
     ptot_vals = []
-    p_idcs = []
-    p_vco_cnt = []
 
     for i_dc in i_vals:
         vin_mV = model.vin_from_G(G_uS, i_dc)
-
-        deltaG_vals.append(
+        deltaG_vals_uS.append(
             model.delta_G_uS(
+                G_uS=G_uS,
                 vin_mV=vin_mV,
                 i_dc_uA=i_dc,
                 fs_Hz=fs_Hz,
@@ -133,21 +134,14 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1):
         p_idc = model.idc_power_uW(vin_mV, i_dc)
         p_vco = model.pvco_from_vin(vin_mV)
         p_cnt = model.pcnt_from_vin(vin_mV)
-        p_idcs.append(p_idc)
-        p_vco_cnt.append(p_vco + p_cnt)
         ptot_vals.append(p_idc + p_vco + p_cnt)
 
-    deltaG_vals = np.asarray(deltaG_vals, dtype=float) * 1000  # Convert to nS
-    p_idcs = np.asarray(p_idcs, dtype=float)
-    p_vco_cnt = np.asarray(p_vco_cnt, dtype=float)
+    deltaG_vals_nS = np.asarray(deltaG_vals_uS, dtype=float) * 1000  # Convert to nS
     ptot_vals = np.asarray(ptot_vals, dtype=float)
 
-    max_i_dc = model.i_dc_max(result.input.G_uS)
-    i_vals = i_vals[i_vals <= max_i_dc] 
-    i_vals = i_vals[:len(i_vals)]  # Limit to first half for better visualization
     # Plot Delta_G on primary axis (steelblue)
-    ax.plot(i_vals, deltaG_vals[:len(i_vals)], linewidth=2.5, label=r'$\Delta G$', color='steelblue')
-    ax.plot(result.input.i_dc_uA, result.output.delta_G_uS * 1000, 'r*', markersize=16, zorder=5)
+    ax.plot(i_vals, deltaG_vals_nS, linewidth=2.5, label=r'$\Delta G$', color='steelblue')
+    ax.plot(result.input.i_dc_uA, result.output.delta_G_uS*1000, 'ko', markersize=6, zorder=5)
 
     ax.set_xlabel(r'$i_{dc}$ (μA)')
     ax.set_ylabel(r'$\Delta G$ (nS)', color='steelblue')
@@ -157,30 +151,70 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1):
 
     # Plot Power on secondary axis (coral)
     ax2 = ax.twinx()
-    ax2.plot(i_vals, p_idcs[:len(i_vals)], linestyle=':', linewidth=2.0, label=r'$P_{iDC}$', color='lightcoral')
-    ax2.plot(i_vals, p_vco_cnt[:len(i_vals)], linestyle='-.', linewidth=2.0, label=r'$P_{VCO} + P_{CNT}$', color='darkorange')
-    ax2.plot(i_vals, ptot_vals[:len(i_vals)], linestyle='--', linewidth=2.0, label=r'$P_{TOT}$', color='coral')
+    ax2.plot(i_vals, ptot_vals,  linewidth=2.5, label=r'$P_{TOT}$', color='coral')
     ax2.plot(result.input.i_dc_uA, result.output.P_tot_uW, 'ko', markersize=6, zorder=5)
+    ax2.axvline(result.input.i_dc_uA, color='black', linestyle='--', alpha=0.5, label='current $i_{dc}$')
     ax2.set_ylabel(r'$P_{TOT}$ (μW)', color='coral')
     ax2.tick_params(axis='y', labelcolor='coral')
+    if reverse_result is not None and reverse_result.output.feasible:
+        i_grid = reverse_result.i_dc_grid_uA
+        feasible = reverse_result.feasible_mask
+
+        if len(i_grid) == len(feasible) and np.any(feasible):
+            ax.fill_between(
+                i_grid,
+                0,
+                np.nanmax(deltaG_vals_nS[:len(i_vals)]) * 1.05,
+                where=feasible[:len(i_grid)],
+                alpha=0.12,
+                color='green',
+                label='feasible region'
+            )
+        i_opt = reverse_result.output.i_dc_opt_uA
+        dG_opt_nS = reverse_result.output.delta_G_opt_uS * 1000
+        P_opt = reverse_result.output.P_tot_opt_uW
+
+        ax.plot(i_opt, dG_opt_nS, 'g*', markersize=8, zorder=6)
+        ax2.axvline(i_opt, color='green', linestyle='--', alpha=0.5, label='optimal $i_{dc}$')
+
+        ax2.plot(i_opt, P_opt, 'g*', markersize=8, zorder=6)
+
+    elif reverse_result is not None and not reverse_result.output.feasible:
+        ax.text(
+            0.03, 0.95,
+            "No feasible $i_{dc}$",
+            transform=ax.transAxes,
+            ha='left', va='top',
+            fontsize=10,
+            color='crimson',
+            bbox=dict(boxstyle='round', facecolor='mistyrose', alpha=0.8)
+        )
 
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labels1 + labels2, fontsize=9, loc='best')
 
-def plot_forward_output_summary(ax, result, model):
+def plot_summary(ax, result, model, variance=1, avg_window=1,reverse_result=None):
     ax.axis("off")
     max_i_dc = model.i_dc_max(result.input.G_uS)
-
     txt = (
         f"ΔG:        {result.output.delta_G_uS * 1000:.4f} nS\n"
-        f"P_VCO_CNT:     {result.output.P_cnt_uW + result.output.P_vco_uW:.4f} μW\n"
-        f"P_idc:     {result.output.P_idc_uW:.4f} μW\n"
         f"P_TOT:     {result.output.P_tot_uW:.4f} μW\n"
         f"─────────────\n"
-        f"i_dc_max: {max_i_dc:.4f} μA\nG×(V_dd-V_min)"
+        f"i_dc range: [0, {max_i_dc:.4f}] μA"
+        f"\nΔG range: [{result.intermediate.delta_G_range_nS[0]:.4f}, {result.intermediate.delta_G_range_nS[1]:.4f}] nS"
     )
-        
+    if reverse_result is not None:
+        txt += f"\n─────────────\nOptimal i_dc search...\n"
+        if reverse_result.output.feasible:
+            txt += (
+                f"i_dc_opt:    {reverse_result.output.i_dc_opt_uA:.4f} μA\n"
+                f"ΔG_opt:      {reverse_result.output.delta_G_opt_uS * 1000:.4f} nS\n"
+                f"P_opt:       {reverse_result.output.P_tot_opt_uW:.4f} μW\n"
+            )
+        else:
+            txt += "No feasible solution\n"
+
     ax.text(
         0.5, 0.5, txt,
         transform=ax.transAxes,
@@ -189,4 +223,4 @@ def plot_forward_output_summary(ax, result, model):
         family='monospace',
         bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.25)
     )
-    ax.set_title("Outputs values", fontweight='bold')
+    ax.set_title("Summary", fontweight='bold')

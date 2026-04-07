@@ -141,7 +141,7 @@ class VCO_Model:
         denom = self.vdd - vin_V
         return vin_V, i_dc_A, denom
 
-    def _df_dV_mV(self, vin_mV):
+    def kvco_kHz_per_mV(self, vin_mV):
         vin_arr = np.asarray(vin_mV, dtype=float)
 
         if self.representation == "poly":
@@ -351,7 +351,7 @@ class VCO_Model:
         return out.item() if np.ndim(out) == 0 else out
     
     def dVin_mV(self, df_osc_Hz, vin_mV):
-        k_kHz_per_mV = self._df_dV_mV(vin_mV)
+        k_kHz_per_mV = self.kvco_kHz_per_mV(vin_mV)
 
         # Convert k from kHz/mV to Hz/mV
         k_Hz_per_mV = np.asarray(k_kHz_per_mV, dtype=float) * 1e3
@@ -362,10 +362,9 @@ class VCO_Model:
 
         return out.item() if out.ndim == 0 else out
 
-    def delta_G_uS(self, vin_mV, i_dc_uA, fs_Hz, variance=1, avg_window=1):
-        G_uS = self.conductance(vin_mV, i_dc_uA)
+    def delta_G_uS(self, G_uS, vin_mV, i_dc_uA, fs_Hz, variance=1, avg_window=1):
+        k_vco_kHz_per_mV = self.kvco_kHz_per_mV(vin_mV)  
         df_osc = self.df_osc_Hz(vin_mV=vin_mV, fs_Hz=fs_Hz, variance=variance, avg_window=avg_window)
-        dVin_mV = self.dVin_mV(df_osc_Hz=df_osc, vin_mV=vin_mV)
 
         _, _, vin_2d, _, vin_scalar, idc_scalar = self._prepare_grid(vin_mV, i_dc_uA)
         vin_V = vin_2d * 1e-3
@@ -378,22 +377,21 @@ class VCO_Model:
         elif idc_scalar:
             G_2d = G_2d[None, :]
 
-        dVin_2d = np.asarray(dVin_mV, dtype=float)
-        if dVin_2d.ndim == 0:
-            dVin_2d = np.full_like(vin_2d, dVin_2d, dtype=float)
+        k_vco_kHz_per_mV_2d = np.asarray(k_vco_kHz_per_mV, dtype=float)
+        if k_vco_kHz_per_mV_2d.ndim == 0:
+            k_vco_kHz_per_mV_2d = np.full_like(vin_2d, k_vco_kHz_per_mV_2d, dtype=float)
         else:
-            dVin_2d = np.broadcast_to(dVin_2d, vin_2d.shape)
+            k_vco_kHz_per_mV_2d = np.broadcast_to(k_vco_kHz_per_mV_2d, k_vco_kHz_per_mV_2d.shape)
 
-        dVin_V = dVin_2d * 1e-3
+        k_vco_Hz_per_V = k_vco_kHz_per_mV_2d * 1e6
 
         with np.errstate(divide='ignore', invalid='ignore'):
-            dG_uS = np.abs((G_2d * dVin_V) / (self.vdd - vin_V + dVin_V))
+            dG_uS = np.abs((df_osc * G_2d**2) / (k_vco_Hz_per_V * i_dc_uA + df_osc * G_2d))
 
         invalid = self._invalid_mask(vin_2d, self.vdd - vin_V)
         dG_uS = np.where(invalid, np.nan, dG_uS)
 
         return self._restore_shape(dG_uS, vin_scalar, idc_scalar)
-
 
     def delta_G_curve(self, fs_Hz=None, variance=1, avg_window=1, vin_min=None):
         return self._evaluate_over_vin_sweep(
@@ -424,8 +422,35 @@ class VCO_Model:
     def pcnt_from_vin(self, vin_mV):
         return np.interp(vin_mV, self.vin_data, self.pcnt_data)
     
-    def kvco_kHz_per_mV(self, vin_mV):
-        return self._df_dV_mV(vin_mV)
-    
     def i_dc_max(self, G_uS):
         return min(float(G_uS * (self.vdd_mV() - self.params.vin_min_mV) / 1000), self.params.idc_max)
+    
+    def compute_delta_G_range_nS(self, G_uS, fs_Hz, variance, avg_window):
+        """Compute min/max deltaG range for given G and fs values"""
+        i_vals = self.params.i_dc_range
+        max_i_dc = self.i_dc_max(G_uS)
+        i_vals_valid = i_vals[i_vals <= max_i_dc]
+        
+        deltaG_vals = []
+        valid_mask = []
+        for i_dc in i_vals_valid:
+            vin_mV = self.vin_from_G(G_uS, i_dc)
+            delta_G_us = self.delta_G_uS(
+                G_uS=G_uS,
+                vin_mV=vin_mV,
+                i_dc_uA=i_dc,
+                fs_Hz=fs_Hz,
+                variance=variance,
+                avg_window=avg_window
+            )
+            deltaG_vals.append(delta_G_us)
+            valid_mask.append(np.isfinite(delta_G_us))
+
+        
+        deltaG_vals_nS = np.asarray(deltaG_vals, dtype=float) * 1000  # Convert to nS
+        valid_mask = np.asarray(valid_mask, dtype=bool)
+
+        if not np.any(valid_mask):
+            return np.nan, np.nan
+
+        return np.nanmin(deltaG_vals_nS[valid_mask]), np.nanmax(deltaG_vals_nS[valid_mask])
