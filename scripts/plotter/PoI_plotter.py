@@ -1,21 +1,20 @@
 from ipywidgets import FloatSlider, VBox, HBox, Layout, HTML, widgets, interactive_output, ToggleButton
 from IPython.display import display
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
 from pannels import *
 from workflow import *
-from VCO_model import *
 
 def PoI_plotter(model, variance=1, avg_window=1):
+    G_init = 20.0
     G_slider = FloatSlider(
-        value=8.0, min=0.5, max=20.0, step=0.5,
+        value=G_init, min=0.5, max=25.0, step=0.5,
         description='G (μS):',
         continuous_update=True,
         layout=Layout(width='300px')
     )
 
     i_dc_slider = FloatSlider(
-        value=1.0, min=0.1, max=10.0, step=0.01,
+        value=1.0, min=0.1, max=model.i_dc_max(G_init), step=0.01,
         description='i_dc (μA):',
         continuous_update=True,
         layout=Layout(width='300px')
