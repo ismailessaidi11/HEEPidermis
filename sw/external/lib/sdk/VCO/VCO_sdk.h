@@ -53,13 +53,13 @@ typedef struct {
 } vco_sdk_t;
 
 // In this function we perform a linear interpolation of the value x based on fp(xp) LUT. 
-uint32_t linear_interp(uint32_t x, uint32_t *xp, uint32_t *fp, uint32_t left, uint32_t right);
+static uint32_t linear_interp(uint32_t x, uint32_t *xp, uint32_t *fp, uint32_t left, uint32_t right);
 
 // In this function we search for the value x based on fp(xp) LUT. 
-uint32_t search_LUT(uint32_t x, uint32_t *xp, uint32_t *fp, uint32_t left, uint32_t right);
+static uint32_t search_LUT(uint32_t x, uint32_t *xp, uint32_t *fp, uint32_t left, uint32_t right);
 
 // Estimate local VCO sensitivity K_VCO = df/dV around a given Vin.
-vco_status_t vco_get_kvco_Hz_per_V(uint32_t vin_uV, uint32_t *kvco_Hz_per_V);
+vco_status_t vco_get_kvco_Hz_per_V(uint32_t *kvco_Hz_per_V, uint32_t vin_uV);
 
 // Interpolate Vin from a VCO oscillation frequency using the calibration table.
 uint32_t interpolate_Vin_uV(uint32_t f_target);
@@ -70,7 +70,10 @@ vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz);
 // Read the latest Vin value reconstructed from the VCO frequency.
 vco_status_t vco_get_Vin_uV(uint32_t *vin_uV);
 
-// Compute the frequency error of the VCO (based on measurements)
-vco_status_t vco_get_frequency_error_Hz(uint32_t *frequency_error_Hz);
+// TODO: Compute the frequency error of the VCO (based on allen deviation measurements)
+static vco_status_t vco_get_frequency_error_Hz(uint32_t *frequency_error_Hz, uint32_t vin_uV, uint32_t refresh_rate_Hz, uint8_t variance);
+
+// Compute the conductance sensitivity of the VCO around a given Vin, based on the i_dc and refresh rate.
+vco_status_t vco_get_delta_G_nS(uint32_t *delta_G_nS, uint32_t G_uS, uint32_t i_dc_uA, uint32_t vin_uV, uint32_t refresh_rate_Hz, uint8_t variance);
 
 #endif /* VCO_SDK_H_ */

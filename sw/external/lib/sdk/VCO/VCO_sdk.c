@@ -48,7 +48,7 @@ uint32_t _table_kvco_Hz_per_V[TABLE_SIZE] = {
 In this function we search for the value x based on fp(xp) LUT. 
 The xp and fp arrays represent the known points of the function, while left and right are the values to return if x is out of bounds.
 */
-uint32_t search_LUT(uint32_t x,
+static uint32_t search_LUT(uint32_t x,
                         uint32_t *xp,
                         uint32_t *fp,
                         uint32_t left, uint32_t right)
@@ -72,7 +72,7 @@ uint32_t search_LUT(uint32_t x,
 In this function we perform a linear interpolation of the value x based on fp(xp) LUT. 
 The xp and fp arrays represent the known points of the function, while left and right are the values to return if x is out of bounds.
 */
-uint32_t linear_interp(uint32_t x,
+static uint32_t linear_interp(uint32_t x,
                         uint32_t *xp,
                         uint32_t *fp,
                         uint32_t left, uint32_t right)
@@ -98,7 +98,7 @@ uint32_t linear_interp(uint32_t x,
 }
 
 // Estimate local VCO sensitivity K_VCO = df/dV around a given Vin.
-vco_status_t vco_get_kvco_Hz_per_V(uint32_t vin_uV, uint32_t *kvco_Hz_per_V) {
+vco_status_t vco_get_kvco_Hz_per_V(uint32_t *kvco_Hz_per_V, uint32_t vin_uV) {
 
     if (kvco_Hz_per_V == NULL) {
         return VCO_STATUS_INVALID_ARGUMENT;
@@ -252,6 +252,70 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     vco_data.last_counter_p = counter_p;
     vco_data.last_counter_n = counter_n;
     vco_data.last_timestamp = now;
+
+    return VCO_STATUS_OK;
+}
+
+static vco_status_t vco_get_frequency_error_Hz(uint32_t *frequency_error_Hz, uint32_t vin_uV, uint32_t refresh_rate_Hz, uint8_t variance)
+{
+    if (frequency_error_Hz == NULL) {
+        return VCO_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (refresh_rate_Hz == 0U) {
+        return VCO_STATUS_INVALID_ARGUMENT;
+    }
+
+    // We use a fixed value for the frequency error based on the Allen deviation measurements of the VCO. 
+    #ifdef ADEV_VAR
+        return VCO_STATUS_INVALID_CONFIGURATION; // not implemented yet
+    #else
+        *frequency_error_Hz = refresh_rate_Hz;
+        return VCO_STATUS_OK;
+    #endif
+}
+
+vco_status_t vco_get_delta_G_nS(uint32_t *delta_G_nS, uint32_t G_uS, uint32_t i_dc_uA, uint32_t vin_uV, uint32_t refresh_rate_Hz, uint8_t variance)
+{
+    if (delta_G_nS == NULL) {
+        return VCO_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (G_uS == 0U || i_dc_uA == 0U || refresh_rate_Hz == 0U) {
+        return VCO_STATUS_INVALID_ARGUMENT;
+    }
+
+    vco_status_t status;
+    uint32_t frequency_error_Hz;
+    uint32_t kvco_Hz_per_V;
+
+    status = vco_get_frequency_error_Hz(&frequency_error_Hz, vin_uV, refresh_rate_Hz, variance);
+    if (status != VCO_STATUS_OK) {
+        return status;
+    }
+
+    status = vco_get_kvco_Hz_per_V(&kvco_Hz_per_V, vin_uV);
+    if (status != VCO_STATUS_OK) {
+        return status;
+    }
+
+    // Note: 32-bit arithmetic is safe from overflow because
+    // kvco_Hz_per_V < 6'000'000 Hz/V (from measurements in scripts/plotter)
+    // i_dc_uA < 10 uA (based on front-end settings)
+    // frequency_error_Hz < 10'000 Hz (based on measurements in scripts/plotter)
+    // G_uS < 500 uS (very conservative upper bound for skin conductance)
+    // worst case denom = 6'000'000 * 10 (this combination never happens) + 10'000 * 500 = 60'000'000 + 5'000'000 = 65'000'000 < 2^32
+    // worst case numer = 10'000 * 500 * 500 = 2'500'000'000 < 2^32
+    uint32_t denom = kvco_Hz_per_V * i_dc_uA + frequency_error_Hz * G_uS;
+
+    if (denom == 0ULL) {
+        return VCO_STATUS_INVALID_CONFIGURATION;
+    }
+
+    uint32_t numer = frequency_error_Hz * G_uS * G_uS;
+
+    uint32_t delta_G_uS = numer / denom;
+    *delta_G_nS  = delta_G_uS * 1000ULL;
 
     return VCO_STATUS_OK;
 }
