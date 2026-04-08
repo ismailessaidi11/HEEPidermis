@@ -12,7 +12,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-
+#include "VCO_decoder.h"
+#include "timer_sdk.h"
 /*
 This file provides the low-level interface to the VCO-based front-end.
 It is used to configure the VCO channel, counter updates, and the conversion
@@ -61,7 +62,7 @@ uint32_t search_LUT(uint32_t x, uint32_t *xp, uint32_t *fp, uint32_t left, uint3
 vco_status_t vco_get_kvco_Hz_per_V(uint32_t vin_uV, uint32_t *kvco_Hz_per_V);
 
 // Interpolate Vin from a VCO oscillation frequency using the calibration table.
-uint32_t __interpolate_Vin_uV(uint32_t f_target);
+uint32_t interpolate_Vin_uV(uint32_t f_target);
 
 // Initialize the VCO path and configure its refresh rate.
 vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz);
