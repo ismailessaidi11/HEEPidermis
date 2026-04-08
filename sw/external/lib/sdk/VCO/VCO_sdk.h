@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // File: VCO_sdk.c
-// Author: Ismail Essaidi
+// Author: Omar Shibli & Ismail Essaidi
 // Date: 08/04/2026
 // Description: Implementation of the VCO SDK functions
 
@@ -69,5 +69,8 @@ vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz);
 
 // Read the latest Vin value reconstructed from the VCO frequency.
 vco_status_t vco_get_Vin_uV(uint32_t *vin_uV);
+
+// Compute the frequency error of the VCO (based on measurements)
+vco_status_t vco_get_frequency_error_Hz(uint32_t *frequency_error_Hz);
 
 #endif /* VCO_SDK_H_ */

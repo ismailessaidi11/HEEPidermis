@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // File: VCO_sdk.c
-// Author: Ismail Essaidi
+// Author: Omar Shibli & Ismail Essaidi
 // Date: 08/04/2026
 // Description: Implementation of the VCO SDK functions
 
