@@ -1,5 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
+from typing import Tuple, Optional
 
 # Dataclasses definition
 @dataclass
@@ -28,7 +29,7 @@ class forward_intermediate_variables:
     df_osc_Hz: float
     dVin_mV: float
 
-    delta_G_range_nS: tuple[float, float]
+    delta_G_range_nS: Tuple[float, float]
 
 @dataclass
 class ForwardPointResult:
@@ -47,10 +48,10 @@ class reverse_input:
 @dataclass
 class reverse_output:
     feasible: bool
-    i_dc_opt_uA: float | None
-    delta_G_opt_uS: float | None
-    P_tot_opt_uW: float | None
-    reason: str | None = None
+    i_dc_opt_uA: Optional[float]
+    delta_G_opt_uS: Optional[float]
+    P_tot_opt_uW: Optional[float]
+    reason: Optional[str] = None
 
 @dataclass
 class ReverseResult:

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import sys
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
@@ -34,7 +35,7 @@ class VCOParams:
 
 class VCOADCModel:
     def __init__(self, data_folder='data', params=None, representation="lut"):
-        self.data_folder = data_folder
+        self.data_folder = sys.path[0] + '/' + data_folder
         self.params = params if params is not None else VCOParams()
         self.representation = representation.lower()
         
@@ -144,6 +145,9 @@ class VCOADCModel:
         i_dc_A = i_2d * 1e-6
         denom = self.params.vdd - vin_V
         return vin_V, i_dc_A, denom
+
+    def get_de_dv_lut(self):
+        return self.df_dv_lut
 
     def kvco_kHz_per_mV(self, vin_mV):
         vin_arr = np.asarray(vin_mV, dtype=float)

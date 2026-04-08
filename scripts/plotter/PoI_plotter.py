@@ -9,35 +9,35 @@ def PoI_plotter(model, variance=1, avg_window=1):
     G_slider = FloatSlider(
         value=G_init, min=0.5, max=25.0, step=0.5,
         description='G (μS):',
-        continuous_update=True,
+        continuous_update=False,
         layout=Layout(width='300px')
     )
 
     i_dc_slider = FloatSlider(
         value=1.0, min=0.1, max=model.i_dc_max(G_init), step=0.01,
         description='i_dc (μA):',
-        continuous_update=True,
+        continuous_update=False,
         layout=Layout(width='300px')
     )
 
     fs_slider = FloatSlider(
         value=1.0, min=0.5, max=20.0, step=0.5,
         description='fs (Hz):',
-        continuous_update=True,
+        continuous_update=False,
         layout=Layout(width='300px')
     )
 
     delta_G_slider = FloatSlider(
         value=0.10, min=0.0, max=1.0, step=0.01,
         description='ΔG tgt (nS):',
-        continuous_update=True,
+        continuous_update=False,
         layout=Layout(width='300px')
     )
 
     P_tot_max_slider = FloatSlider(
         value=10.0, min=0.1, max=20.0, step=0.1,
         description='Pmax (μW):',
-        continuous_update=True,
+        continuous_update=False,
         layout=Layout(width='300px')
     )
 
@@ -47,12 +47,20 @@ def PoI_plotter(model, variance=1, avg_window=1):
         layout=Layout(width='80px', height='30px')
     )
 
+    # Cache for expensive computations
+    _computation_cache = {
+        'last_G': G_init,
+        'last_fs': 1.0,
+        'last_variance': False
+    }
+
     def update_variance_description(change):
         variance_on.description = 'avar ON' if change['new'] else 'avar OFF'
 
     variance_on.observe(update_variance_description, names='value')
 
     def update_i_dc_max(change):
+        """Only update i_dc max when G changes"""
         G_value = change['new']
         max_i_dc = model.i_dc_max(G_value)
         i_dc_slider.max = max_i_dc
@@ -60,9 +68,20 @@ def PoI_plotter(model, variance=1, avg_window=1):
             i_dc_slider.value = max_i_dc
 
     def update_delta_G_range(change=None):
+        """Update ΔG slider range when G, fs, or variance changes"""
         G_value = G_slider.value
         fs_value = fs_slider.value
         active_variance = variance if variance_on.value else 0
+
+        # Skip redundant computations
+        if (_computation_cache['last_G'] == G_value and 
+            _computation_cache['last_fs'] == fs_value and 
+            _computation_cache['last_variance'] == variance_on.value):
+            return
+
+        _computation_cache['last_G'] = G_value
+        _computation_cache['last_fs'] = fs_value
+        _computation_cache['last_variance'] = variance_on.value
 
         min_deltaG, max_deltaG = model.compute_delta_G_range_nS(
             G_value,
@@ -81,10 +100,19 @@ def PoI_plotter(model, variance=1, avg_window=1):
             elif delta_G_slider.value < delta_G_slider.min:
                 delta_G_slider.value = delta_G_slider.min
 
-    G_slider.observe(update_i_dc_max, names='value')
-    G_slider.observe(update_delta_G_range, names='value')
-    fs_slider.observe(update_delta_G_range, names='value')
-    variance_on.observe(lambda change: update_delta_G_range(), names='value')
+    def on_G_change(change):
+        """Single consolidated callback for G slider changes"""
+        update_i_dc_max(change)
+        update_delta_G_range(change)
+
+    def on_control_change(change):
+        """Callback for fs and variance changes"""
+        update_delta_G_range(change)
+
+    # Single observer per slider to avoid redundant callbacks
+    G_slider.observe(on_G_change, names='value')
+    fs_slider.observe(on_control_change, names='value')
+    variance_on.observe(on_control_change, names='value')
 
     forward_controls = VBox(
         [
