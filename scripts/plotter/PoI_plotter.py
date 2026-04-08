@@ -1,4 +1,12 @@
-from ipywidgets import FloatSlider, VBox, HBox, Layout, HTML, widgets, interactive_output, ToggleButton
+# Copyright 2026 EPFL contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# File: PoI_plotter.py
+# Author: Ismail Essaidi
+# Date: 08/04/2026
+# Description: Interactive VCO model plotter with forward/reverse optimization
+
+from ipywidgets import FloatSlider, VBox, HBox, Layout, HTML, interactive_output, ToggleButton
 from IPython.display import display
 import matplotlib.pyplot as plt
 from pannels import *

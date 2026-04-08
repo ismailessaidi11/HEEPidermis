@@ -1,5 +1,12 @@
+# Copyright 2026 EPFL contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# File: pannels.py
+# Author: Ismail Essaidi
+# Date: 08/04/2026
+# Description: Matplotlib visualization panels for VCO model exploration
+
 import numpy as np
-import matplotlib.pyplot as plt
 
 def plot_forward_vco_point(ax, model, result):
     vin_plot = model.params.vin_range

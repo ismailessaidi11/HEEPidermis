@@ -1,3 +1,11 @@
+# Copyright 2026 EPFL contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# File: vco_model.py
+# Author: Juan Sapriza & Ismail Essaidi
+# Date: 08/04/2026
+# Description: Implementation of the VCO model and analysis functions
+
 from dataclasses import dataclass
 import sys
 import numpy as np
