@@ -204,11 +204,13 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1, reverse_r
 def plot_summary(ax, result, model, variance=1, avg_window=1,reverse_result=None):
     ax.axis("off")
     max_i_dc = model.i_dc_max(result.input.G_uS)
+    min_G_uS = model.conductance(model.params.vin_min_mV, result.input.i_dc_uA)
     txt = (
         f"ΔG:        {result.output.delta_G_uS * 1000:.4f} nS\n"
         f"P_TOT:     {result.output.P_tot_uW:.4f} μW\n"
         f"─────────────\n"
         f"i_dc range: [0, {max_i_dc:.4f}] μA"
+        f"\nG range: [{min_G_uS:.4f}, +∞] μS"
         f"\nΔG range: [{result.intermediate.delta_G_range_nS[0]:.4f}, {result.intermediate.delta_G_range_nS[1]:.4f}] nS"
     )
     if reverse_result is not None:
