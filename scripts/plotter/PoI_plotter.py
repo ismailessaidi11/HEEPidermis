@@ -22,7 +22,7 @@ def PoI_plotter(model, variance=1, avg_window=1):
     )
 
     i_dc_slider = FloatSlider(
-        value=1.0, min=0.1, max=model.i_dc_max(G_init), step=0.01,
+        value=1.0, min=0.1, max=model.i_dc_max(G_init), step=0.04,
         description='i_dc (μA):',
         continuous_update=False,
         layout=Layout(width='300px')
