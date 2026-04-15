@@ -86,8 +86,32 @@ uint32_t gsr_current_from_idac_code_nA(uint8_t idac_code) {
     return (uint32_t)idac_code * GSR_IDAC_LSB_NA;
 }
 
+gsr_status_t gsr_set_current(gsr_context_t *ctx, uint8_t idac_code) {
+
+    if (ctx == NULL) return GSR_STATUS_INVALID_ARGUMENT;
+    uint32_t current_nA = gsr_current_from_idac_code_nA(idac_code);
+
+    // check validity of current range when a conductance-based limit is available
+    if (ctx->limits.max_current_nA > GUARD_IDC_NA &&
+        current_nA > ctx->limits.max_current_nA - GUARD_IDC_NA) { 
+        return GSR_STATUS_OUT_OF_RANGE;
+    }
+
+    // current configuration 
+    ctx->config.idac_code = idac_code;
+    ctx->current_nA = current_nA;
+    
+    // After changing the current, the conductance measurement limit must be updated. (do I ?)
+    // ctx->limits.min_conductance_nS = gsr_get_conductance_nS(ctx->current_nA, GSR_VIN_MIN_UV);
+
+    // update the iDAC hardware registers with the new current
+    iDACs_set_currents(idac_code, 0U);
+
+    return GSR_STATUS_OK;
+}
+
 gsr_status_t gsr_set_config(gsr_context_t *ctx,
-                              const gsr_measurement_config_t *config) {
+                              const gsr_config_t *config) {
     
     if (ctx == NULL || config == NULL || config->refresh_rate_Hz == 0U || config->idac_code == 0U) return GSR_STATUS_INVALID_ARGUMENT;
     
@@ -107,7 +131,7 @@ gsr_status_t gsr_set_config(gsr_context_t *ctx,
 }
 
 gsr_status_t gsr_init(gsr_context_t *ctx,
-                              const gsr_measurement_config_t *config) {
+                              const gsr_config_t *config) {
     
     if (ctx == NULL || config == NULL || config->refresh_rate_Hz == 0U || config->idac_code == 0U) return GSR_STATUS_INVALID_ARGUMENT;
     
@@ -124,6 +148,7 @@ gsr_status_t gsr_init(gsr_context_t *ctx,
         .valid = false
     };
     ctx->last_sample = init_sample;
+    ctx->limits.max_current_nA = GSR_MAX_CURRENT_NA;
 
     ret = gsr_set_config(ctx, config);
     if (ret != GSR_STATUS_OK) return ret;
@@ -132,29 +157,6 @@ gsr_status_t gsr_init(gsr_context_t *ctx,
     if (ret != GSR_STATUS_OK) return ret;
 
     ctx->initialized = true;
-    return GSR_STATUS_OK;
-}
-
-gsr_status_t gsr_set_current(gsr_context_t *ctx, uint8_t idac_code) {
-
-    if (ctx == NULL || !ctx->initialized) return GSR_STATUS_INVALID_ARGUMENT;
-    uint32_t current_nA = gsr_current_from_idac_code_nA(idac_code);
-
-    // check validity of current range
-    if (current_nA > ctx->limits.max_current_nA - GUARD_IDC_NA) { 
-        return GSR_STATUS_OUT_OF_RANGE;
-    }
-
-    // current configuration 
-    ctx->config.idac_code = idac_code;
-    ctx->current_nA = current_nA;
-    
-    // After changing the current, the conductance measurement limit must be updated. (do I ?)
-    // ctx->limits.min_conductance_nS = gsr_get_conductance_nS(ctx->current_nA, GSR_VIN_MIN_UV);
-
-    // update the iDAC hardware registers with the new current
-    iDACs_set_currents(idac_code, 0U);
-
     return GSR_STATUS_OK;
 }
 
@@ -239,7 +241,7 @@ const gsr_sample_t *gsr_get_last_sample(const gsr_context_t *ctx) {
 
 // BACKWARD COMPATIBILITY !!! 
 // gsr_status_t gsr_init(vco_channel_t channel, uint32_t refresh_rate_Hz, uint8_t idac_val) {
-//     gsr_measurement_config_t config = {
+//     gsr_config_t config = {
 //         .channel = channel,
 //         .refresh_rate_Hz = refresh_rate_Hz,
 //         .idac_code = idac_val,

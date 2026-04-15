@@ -43,13 +43,13 @@ typedef struct {
     vco_channel_t channel;       /* VCO path used to reconstruct Vin. */
     uint32_t refresh_rate_Hz;    /* VCO sampling rate requested from the VCO SDK. */
     uint8_t idac_code;           /* Raw iDAC code used to set the injected current. */
-} gsr_measurement_config_t;
+} gsr_config_t;
 
 /* Derived measurement limits for the active current setting. */
 typedef struct {
     // uint32_t min_conductance_nS; /* Lowest conductance measurable with the active current and Vin range. */
     uint32_t max_current_nA;     /* Highest injectable current supported by the iDAC model and the last measured conductance. */
-} gsr_measurement_limits_t;
+} gsr_limits_t;
 
 /* One reconstructed GSR sample. */
 typedef struct {
@@ -69,8 +69,8 @@ typedef struct {
 
 /* SDK context. */
 typedef struct {
-    gsr_measurement_config_t config; /* Active VCO/iDAC control values */
-    gsr_measurement_limits_t limits; /* Limits derived from the active operation point. */
+    gsr_config_t config; /* Active VCO/iDAC control values */
+    gsr_limits_t limits; /* Limits derived from the active operation point. */
     gsr_sample_t last_sample;        /* Most recent sample returned by the measurement. */
     uint32_t current_nA;             /* Cached current converted from config.idac_code. */
     bool initialized;                /* True after the VCO/iDAC measurement chain is configured. */
@@ -79,16 +79,16 @@ typedef struct {
 /* Convert an iDAC code to injected current using the present front-end model. */
 uint32_t gsr_current_from_idac_code_nA(uint8_t idac_code);
 
+/* Update only the current used by the measurement conversion and iDAC block. */
+gsr_status_t gsr_set_current(gsr_context_t *ctx, uint8_t idac_code);
+
 /* Synchronize gsr_context with the new VCO/iDAC config, then apply it to the hardware (iDAC and VCO) */
 gsr_status_t gsr_set_config(gsr_context_t *ctx,
-                              const gsr_measurement_config_t *config);
+                              const gsr_config_t *config);
 
 /* Initialize the measurement chain with the specified VCO/iDAC configuration. */
 gsr_status_t gsr_init(gsr_context_t *ctx,
-                              const gsr_measurement_config_t *config);
-
-/* Update only the current used by the measurement conversion and iDAC block. */
-gsr_status_t gsr_set_current(gsr_context_t *ctx, uint8_t idac_code);
+                              const gsr_config_t *config);
 
 /* Read one sample and store it in the context. */
 gsr_status_t gsr_read_sample(gsr_context_t *ctx, gsr_sample_t *sample);
