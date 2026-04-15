@@ -20,8 +20,7 @@ typedef struct {
 } gsr_range_profile_t;
 
 typedef struct {
-    vco_channel_t channel;
-    uint32_t refresh_rate_Hz;
+    uint32_t integration_rate_Hz;
 } gsr_sensitivity_profile_t;
 
 /*
@@ -36,9 +35,9 @@ static const gsr_range_profile_t k_range_profiles[GSR_OPCTRL_PROFILE_COUNT] = {
 };
 
 static const gsr_sensitivity_profile_t k_sensitivity_profiles[GSR_OPCTRL_PROFILE_COUNT] = {
-    { .channel = VCO_CHANNEL_P, .refresh_rate_Hz = 1U  },
-    { .channel = VCO_CHANNEL_P, .refresh_rate_Hz = 5U  },
-    { .channel = VCO_CHANNEL_P, .refresh_rate_Hz = 20U },
+    { .integration_rate_Hz = 1U  },
+    { .integration_rate_Hz = 5U  },
+    { .integration_rate_Hz = 20U },
 };
 
 static bool gsr_opctrl_is_valid_request(const gsr_op_request_t *request) {
@@ -132,8 +131,7 @@ gsr_opctrl_status_t gsr_opctrl_plan(const gsr_op_request_t *request,
     sensitivity_profile = &k_sensitivity_profiles[(uint32_t)request->sensitivity];
 
     operating_point->request = *request;
-    operating_point->config.channel = sensitivity_profile->channel;
-    operating_point->config.refresh_rate_Hz = sensitivity_profile->refresh_rate_Hz;
+    operating_point->config.integration_rate_Hz = sensitivity_profile->integration_rate_Hz;
     operating_point->config.idac_code = range_profile->idac_code;
 
     return GSR_OPCTRL_OK;

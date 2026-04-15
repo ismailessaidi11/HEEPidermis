@@ -39,17 +39,17 @@ const uint32_t _table_kvco_Hz_per_V[TABLE_SIZE] = {
 
 #define INTERPOLATE_FROM_LUT // comment if you want to read directly from LUT without interpolation (it gives less smooth results)
 
-static uint32_t g_refresh_rate_Hz = 0;
+static uint32_t g_integration_rate_Hz = 0;
 static vco_sdk_t vco_data;
 
 /*  
 This function initializes the VCO, it uses an enum to set the channel
 used as either NONE, P Channel, N channel, or Pseudo Differential mode.
 */
-vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz){
+vco_status_t vco_initialize(vco_channel_t channel, uint32_t integration_rate_Hz){
     
     //Check if valid refresh rate
-    if (refresh_rate_Hz == 0) {
+    if (integration_rate_Hz == 0) {
         return VCO_STATUS_INVALID_ARGUMENT;
     }
 
@@ -76,11 +76,11 @@ vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz){
     }
 
     // set the VCO refresh rate
-    g_refresh_rate_Hz = refresh_rate_Hz;
+    g_integration_rate_Hz = integration_rate_Hz;
     #if TARGET_SIM
-        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/(1000*refresh_rate_Hz));
+        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/(1000*integration_rate_Hz));
     #else
-        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/refresh_rate_Hz);
+        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/integration_rate_Hz);
     #endif
     VCO_set_refresh_rate(refresh_rate_CC);
 
@@ -98,18 +98,18 @@ vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz){
 /*
 This function sets the refresh rate of the VCO. It updates both the global variable and the hardware VCO register.
 */
-vco_status_t vco_set_refresh_rate(uint32_t refresh_rate_Hz) {
-    if (refresh_rate_Hz == 0) {
+vco_status_t vco_set_refresh_rate(uint32_t integration_rate_Hz) {
+    if (integration_rate_Hz == 0) {
         return VCO_STATUS_INVALID_ARGUMENT;
     }
 
     #if TARGET_SIM
-        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/(1000*refresh_rate_Hz));
+        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/(1000*integration_rate_Hz));
     #else
-        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/refresh_rate_Hz);
+        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/integration_rate_Hz);
     #endif
     // update the global variables
-    g_refresh_rate_Hz = refresh_rate_Hz;
+    g_integration_rate_Hz = integration_rate_Hz;
     vco_data.refresh_cycles = refresh_rate_CC;
 
     // update the hardware register
@@ -198,7 +198,7 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
         return VCO_STATUS_INVALID_ARGUMENT;
     }
 
-    if (g_refresh_rate_Hz == 0 || vco_data.channel == VCO_CHANNEL_NONE) {
+    if (g_integration_rate_Hz == 0 || vco_data.channel == VCO_CHANNEL_NONE) {
         return VCO_STATUS_NOT_INITIALIZED;
     }
 
@@ -248,13 +248,13 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     switch (vco_data.channel)
     {
     case VCO_CHANNEL_P:
-        frequency_Hz = delta_p * g_refresh_rate_Hz;
+        frequency_Hz = delta_p * g_integration_rate_Hz;
         break;
     case VCO_CHANNEL_N:
-        frequency_Hz = delta_n * g_refresh_rate_Hz;
+        frequency_Hz = delta_n * g_integration_rate_Hz;
         break;
     case VCO_CHANNEL_DIFFERENTIAL:
-        frequency_Hz = (delta_n - delta_p) * g_refresh_rate_Hz;
+        frequency_Hz = (delta_n - delta_p) * g_integration_rate_Hz;
         break;
     default:
         return VCO_STATUS_INVALID_CONFIGURATION;

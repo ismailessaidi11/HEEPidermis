@@ -41,7 +41,7 @@ typedef enum {
 /* Hardware configuration required by the measurement layer. */
 typedef struct {
     vco_channel_t channel;       /* VCO path used to reconstruct Vin. */
-    uint32_t refresh_rate_Hz;    /* VCO sampling rate requested from the VCO SDK. */
+    uint32_t integration_rate_Hz;    /* VCO sampling rate requested from the VCO SDK. */
     uint8_t idac_code;           /* Raw iDAC code used to set the injected current. */
 } gsr_config_t;
 
@@ -102,7 +102,7 @@ gsr_status_t gsr_read_oversampled(gsr_context_t *ctx,
 const gsr_sample_t *gsr_get_last_sample(const gsr_context_t *ctx);
 
 /* Compatibility wrappers using a default static context. */
-// gsr_status_t gsr_init(vco_channel_t channel, uint32_t refresh_rate_Hz, uint8_t idac_val);
+// gsr_status_t gsr_init(vco_channel_t channel, uint32_t integration_rate_Hz, uint8_t idac_val);
 // void gsr_update_current(uint8_t idac_val);
 // gsr_status_t gsr_get_conductance_nS(uint32_t *conductance_nS, uint32_t *vin_uV_ret);
 // gsr_status_t gsr_get_conductance_oversampled(uint32_t *conductance_nS, int oversample_ratio);

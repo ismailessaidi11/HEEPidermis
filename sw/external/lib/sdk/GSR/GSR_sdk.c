@@ -36,6 +36,9 @@ static gsr_status_t gsr_status_from_vco(vco_status_t status) {
 static uint32_t gsr_max_current_for_conductance_nS(uint32_t conductance_nS) {
     const uint32_t delta_v_min_uV = GSR_VCO_SUPPLY_VOLTAGE_UV - GSR_VIN_MIN_UV;
     uint32_t max_current_nA = (uint32_t)(((uint64_t)conductance_nS * delta_v_min_uV) / 1000000ULL);
+    if (max_current_nA < GUARD_IDC_NA) {
+        // TODO How to handle this ? 
+    }
 
     return min(max_current_nA, GSR_MAX_CURRENT_NA); 
 }
@@ -47,21 +50,21 @@ static uint32_t gsr_get_conductance_nS(uint32_t current_nA, uint32_t vin_uV) {
 }
 
 // TODO: Compute the frequency error of the VCO (based on allen deviation measurements)
-static uint32_t gsr_get_frequency_error_Hz(uint32_t vin_uV, uint32_t refresh_rate_Hz, uint8_t variance)
+static uint32_t gsr_get_frequency_error_Hz(uint32_t vin_uV, uint32_t integration_rate_Hz, uint8_t variance)
 {
 
     // We use a fixed value for the frequency error based on the Allen deviation measurements of the VCO. 
     #ifdef ADEV_VAR
         return 0; // not implemented yet
     #else
-        return refresh_rate_Hz;
+        return integration_rate_Hz;
     #endif
 }
 
 // Compute the conductance sensitivity (delta G) of the VCO around a given Vin, based on the i_dc and refresh rate.
-static uint32_t gsr_get_conductance_sensitivity_nS(uint32_t conductance_nS, uint32_t vin_uV, uint32_t current_nA, uint32_t refresh_rate_Hz)
+static uint32_t gsr_get_conductance_sensitivity_nS(uint32_t conductance_nS, uint32_t vin_uV, uint32_t current_nA, uint32_t integration_rate_Hz)
 {
-    uint32_t frequency_error_Hz = gsr_get_frequency_error_Hz(vin_uV, refresh_rate_Hz, VCO_VARIANCE);
+    uint32_t frequency_error_Hz = gsr_get_frequency_error_Hz(vin_uV, integration_rate_Hz, VCO_VARIANCE);
     uint32_t kvco_Hz_per_V = vco_get_kvco_Hz_per_V(vin_uV);
 
     // Note: 32-bit arithmetic is safe from overflow because
@@ -92,8 +95,7 @@ gsr_status_t gsr_set_current(gsr_context_t *ctx, uint8_t idac_code) {
     uint32_t current_nA = gsr_current_from_idac_code_nA(idac_code);
 
     // check validity of current range when a conductance-based limit is available
-    if (ctx->limits.max_current_nA > GUARD_IDC_NA &&
-        current_nA > ctx->limits.max_current_nA - GUARD_IDC_NA) { 
+    if (current_nA > ctx->limits.max_current_nA - GUARD_IDC_NA) { 
         return GSR_STATUS_OUT_OF_RANGE;
     }
 
@@ -113,7 +115,7 @@ gsr_status_t gsr_set_current(gsr_context_t *ctx, uint8_t idac_code) {
 gsr_status_t gsr_set_config(gsr_context_t *ctx,
                               const gsr_config_t *config) {
     
-    if (ctx == NULL || config == NULL || config->refresh_rate_Hz == 0U || config->idac_code == 0U) return GSR_STATUS_INVALID_ARGUMENT;
+    if (ctx == NULL || config == NULL || config->integration_rate_Hz == 0U || config->idac_code == 0U) return GSR_STATUS_INVALID_ARGUMENT;
     
     gsr_status_t ret;
 
@@ -124,7 +126,7 @@ gsr_status_t gsr_set_config(gsr_context_t *ctx,
     if (ret != GSR_STATUS_OK) return ret;
 
     // setup the config of the VCO Hardware registers
-    ret = gsr_status_from_vco(vco_set_refresh_rate(config->refresh_rate_Hz));
+    ret = gsr_status_from_vco(vco_set_refresh_rate(config->integration_rate_Hz));
     if (ret != GSR_STATUS_OK) return ret;
 
     return ret;
@@ -133,7 +135,7 @@ gsr_status_t gsr_set_config(gsr_context_t *ctx,
 gsr_status_t gsr_init(gsr_context_t *ctx,
                               const gsr_config_t *config) {
     
-    if (ctx == NULL || config == NULL || config->refresh_rate_Hz == 0U || config->idac_code == 0U) return GSR_STATUS_INVALID_ARGUMENT;
+    if (ctx == NULL || config == NULL || config->integration_rate_Hz == 0U || config->idac_code == 0U) return GSR_STATUS_INVALID_ARGUMENT;
     
     gsr_status_t ret;
     
@@ -153,7 +155,7 @@ gsr_status_t gsr_init(gsr_context_t *ctx,
     ret = gsr_set_config(ctx, config);
     if (ret != GSR_STATUS_OK) return ret;
 
-    ret = gsr_status_from_vco(vco_initialize(config->channel, config->refresh_rate_Hz));
+    ret = gsr_status_from_vco(vco_initialize(config->channel, config->integration_rate_Hz));
     if (ret != GSR_STATUS_OK) return ret;
 
     ctx->initialized = true;
@@ -182,7 +184,7 @@ gsr_status_t gsr_read_sample(gsr_context_t *ctx, gsr_sample_t *sample) {
     sample->conductance_nS = gsr_get_conductance_nS(sample->current_nA, sample->vin_uV);
 
     sample->conductance_sensitivity_nS = gsr_get_conductance_sensitivity_nS(sample->conductance_nS, sample->vin_uV, 
-                                                                            sample->current_nA, ctx->config.refresh_rate_Hz);
+                                                                            sample->current_nA, ctx->config.integration_rate_Hz);
     sample->valid = true;
 
     // update max current limit based on the new conductance measurement
@@ -240,10 +242,10 @@ const gsr_sample_t *gsr_get_last_sample(const gsr_context_t *ctx) {
 }
 
 // BACKWARD COMPATIBILITY !!! 
-// gsr_status_t gsr_init(vco_channel_t channel, uint32_t refresh_rate_Hz, uint8_t idac_val) {
+// gsr_status_t gsr_init(vco_channel_t channel, uint32_t integration_rate_Hz, uint8_t idac_val) {
 //     gsr_config_t config = {
 //         .channel = channel,
-//         .refresh_rate_Hz = refresh_rate_Hz,
+//         .integration_rate_Hz = integration_rate_Hz,
 //         .idac_code = idac_val,
 //     };
 
