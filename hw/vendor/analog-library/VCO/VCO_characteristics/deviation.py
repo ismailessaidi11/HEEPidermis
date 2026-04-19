@@ -38,7 +38,7 @@ df_n = load_and_clean('data/VCO variability - summary N.csv')
 df_p = load_and_clean('data/VCO variability - summary P.csv') # Ensure this file is present
 
 fig, axes = plt.subplots(1, 3, figsize=(10, 3), sharey=True)
-voltages = df_n.columns
+voltages = df_n.columns[5:]
 colors = plt.cm.viridis(np.linspace(0, 1, len(voltages)))
 
 for i, v in enumerate(voltages):
@@ -116,7 +116,8 @@ kvco = np.gradient(f_means, voltages)
 # Constants
 fs = 10
 selected_taus = np.array([0.1, 0.5, 1.0])
-colours = ["black", "gray", "lightgray"]
+selected_fs = np.array([1, 2, 10, 100])
+colours = ["black", "gray", "lightgray", 'red']
 
 adev_results = []
 ire_results = []
@@ -130,7 +131,7 @@ for i, col in enumerate(df_n.columns):
     scaling_factor = f_means[i] / np.abs(kvco[i]) if kvco[i] != 0 else np.nan
     ires = adevs * scaling_factor
 
-    fquant = 1/selected_taus
+    fquant = selected_fs#1/selected_taus
     vquant = fquant/np.abs(kvco[i]) if kvco[i] != 0 else np.nan
     quant_results.append(vquant)
 
@@ -166,8 +167,10 @@ if 0:
 # Plot 2: IRE (V) vs Vin
 plt.figure(figsize=(6, 3))
 for j, tau in enumerate(selected_taus):
-    plt.plot(voltages*1e3, ire_results[:, j], 'o-', markersize=4,label=r'$f_{s}$'+f'={1/tau:g} Hz',c=colours[j], zorder=len(selected_taus)-j)
-    plt.plot(voltages*1e3, quant_results[:, j], c=colours[j],linestyle='--')
+    plt.plot(voltages*1e3, ire_results[:, j], 'o-', markersize=4,c=colours[j], zorder=len(selected_taus)-j)
+
+for j, fs in enumerate(selected_fs):
+    plt.plot(voltages*1e3, quant_results[:, j], c=colours[j],linestyle='--', label=r'$f_{s}$'+f'={fs:g} Hz')
 
 plt.yscale('log')
 plt.xlim(200,850)

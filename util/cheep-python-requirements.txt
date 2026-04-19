@@ -7,4 +7,5 @@ pandas==2.0.3
 ipywidgets
 matplotlib
 scipy
+voila
 # Remember to leave an empty line at the end
