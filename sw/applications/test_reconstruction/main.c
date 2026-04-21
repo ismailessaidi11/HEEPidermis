@@ -102,7 +102,8 @@ static int test_gsr_oversampled(void)
     }
 
     uint32_t g_avg_nS = 0;
-    st = gsr_get_conductance_oversampled(&g_avg_nS, OVERSAMPLE_RATIO);
+    uint32_t vin_avg_uV = 0;
+    st = gsr_get_conductance_oversampled(&g_avg_nS, &vin_avg_uV, OVERSAMPLE_RATIO);
     if (st != GSR_STATUS_OK) {
         PRINTF("  FAIL: gsr_get_conductance_oversampled returned %d\n", st);
         return -1;
