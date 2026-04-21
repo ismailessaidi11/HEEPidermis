@@ -53,10 +53,10 @@ typedef struct {
 } vco_sdk_t;
 
 // Initialize the VCO path and configure its refresh rate.
-vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz);
+vco_status_t vco_initialize(vco_channel_t channel, uint32_t integration_rate_Hz);
 
 // sets new refresh rate for the VCO
-vco_status_t vco_set_refresh_rate(uint32_t refresh_rate_Hz);
+vco_status_t vco_set_refresh_rate(uint32_t integration_rate_Hz);
 
 // Estimate local VCO sensitivity K_VCO = df/dV around a given Vin.
 uint32_t vco_get_kvco_Hz_per_V(uint32_t vin_uV);
