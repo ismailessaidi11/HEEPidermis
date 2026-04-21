@@ -411,6 +411,12 @@ vendor-update:
 		exit 1; \
 	fi
 
+.PHONY:plotter
+plotter:
+	voila scripts/plotter/main.ipynb --no-browser --port 8866 &\
+	xdg-open http://localhost:8866/
+
+
 ## Create directories
 %/:
 	mkdir -p $@
