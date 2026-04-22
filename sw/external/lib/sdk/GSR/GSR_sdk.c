@@ -90,7 +90,7 @@ gsr_status_t gsr_get_conductance_oversampled(uint32_t *conductance_nS, uint32_t 
     int valid_samples = 0;
 
     while (valid_samples < oversample_ratio) {
-        uint32_t conductance_nS, vin_uV = 0;
+        uint32_t conductance_nS = 0, vin_uV = 0;
         gsr_status_t ret = gsr_get_conductance_nS(&conductance_nS, &vin_uV);
 
         if (ret == GSR_STATUS_OK) {

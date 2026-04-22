@@ -56,6 +56,7 @@ static gsr_status_t controller_set_refresh(gsr_controller_t *ctrl, gsr_ctrl_mode
         default:
             return GSR_STATUS_INVALID_ARGUMENT;
     }
+    ctrl->config.current_refresh_rate_Hz = new_rate_Hz; // keep track of the current refresh rate in the controller state for reference
     return gsr_status_from_vco(vco_set_refresh_rate(new_rate_Hz));
 }
 
@@ -138,10 +139,10 @@ gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl) {
     }
 
     ctrl->config.channel = VCO_CHANNEL_P;
-    ctrl->config.baseline_refresh_rate_Hz = 2;
+    ctrl->config.baseline_refresh_rate_Hz = 1;
     ctrl->config.phasic_refresh_rate_Hz = 20;
     ctrl->config.recovery_refresh_rate_Hz = 5;
-    ctrl->config.idac_code = 20;
+    ctrl->config.idac_code = 5;
     ctrl->amplitude_threshold_nS = 80;
     ctrl->slope_threshold_nS = 40;
     ctrl->settle_threshold_nS = 25;
@@ -199,6 +200,7 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
 
     ctrl->initialized = false;
 
+    ctrl->config.current_refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz; // initialize the current refresh rate to the baseline rate
     return gsr_init(ctrl->config.channel, ctrl->config.baseline_refresh_rate_Hz, ctrl->config.idac_code);
 
 }
@@ -237,7 +239,7 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl, uint32_t oversample_ratio) 
         ctrl->config.current_refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
         ctrl->max_current_nA = max_current_for_conductance_nS(new_conductance_nS);
         ctrl->initialized = true;
-        return GSR_STATUS_NOT_INITIALIZED;
+        return GSR_STATUS_OK;
     }
     // Slope is expressed in nS/s by multiplying the sample difference by fs.
     ctrl->sample.slope_nS = ((int32_t)ctrl->sample.G_nS - (int32_t)ctrl->sample.prev_G_nS) * (int32_t)ctrl->config.current_refresh_rate_Hz;

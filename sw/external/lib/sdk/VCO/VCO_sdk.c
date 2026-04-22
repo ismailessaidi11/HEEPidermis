@@ -8,8 +8,18 @@
 
 #include "VCO_sdk.h"
 
-#define TABLE_SIZE 25
+#define PRINTF_IN_SIM  1
+#define PRINTF_IN_FPGA 0
+#if TARGET_SIM && PRINTF_IN_SIM
+    #define PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#elif PRINTF_IN_FPGA && !TARGET_SIM
+    #define PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#else
+    #define PRINTF(...)
+#endif
 
+#define TABLE_SIZE 25
+#define VCO_GAIN 100
 // TODO: check if 320mV is accurate + we can discard 820 mV point
 const uint32_t _table_Vin_uV[TABLE_SIZE] ={
     330000, 340000, 360000, 380000, 400000, 
@@ -259,9 +269,10 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     default:
         return VCO_STATUS_INVALID_CONFIGURATION;
     }
-
-    *vin_uV  = interpolate_Vin_uV(frequency_Hz);
-    if (*vin_uV >= VCO_SUPPLY_VOLTAGE_UV || *vin_uV < _table_Vin_uV[0]) {
+    frequency_Hz = frequency_Hz * VCO_GAIN; // apply the gain to get the actual frequency, this is because the count is based on the number of oscillations in the refresh period, and we want to get the frequency in Hz.
+    PRINTF("f: %d\n", frequency_Hz);
+    *vin_uV  = interpolate_Vin_uV(frequency_Hz); // already handles out of bound cases and gives the corresponding min/max values.
+    if (*vin_uV == VCO_SUPPLY_VOLTAGE_UV || *vin_uV == _table_Vin_uV[0]) {
         *vin_uV = _table_Vin_uV[0]; // cap the output to the min voltage
         return VCO_STATUS_OUT_OF_RANGE;
     }
