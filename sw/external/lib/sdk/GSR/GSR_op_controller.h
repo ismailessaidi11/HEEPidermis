@@ -12,7 +12,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "GSR_sdk.h"
+#include "GSR_controller.h"
 
 /* Status codes returned by the operating-point controller. */
 typedef enum {
@@ -51,37 +51,34 @@ typedef struct {
 /* Hardware state resolved from a request. */
 typedef struct {
     gsr_op_request_t request;        /* Original high-level request. */
-    gsr_config_t config;             /* Resolved hardware configuration. */
+    gsr_config_t config;             /* Resolved controller configuration. */
 } gsr_operating_point_t;
 
-/* Deferred range event. ISRs should raise one of these, then non-ISR code can
- * call gsr_opctrl_handle_range_event().
- */
+/* Deferred range event raised by interrupt-side logic. */
 typedef enum {
     GSR_OPCTRL_RANGE_EVENT_NONE = 0,
     GSR_OPCTRL_RANGE_EVENT_VIN_TOO_LOW,
     GSR_OPCTRL_RANGE_EVENT_VIN_TOO_HIGH,
 } gsr_opctrl_range_event_t;
 
-/* Controller state. */
+/* Thin request layer state. The GSR controller owns measurement/config state. */
 typedef struct {
-    gsr_context_t *measurement_ctx;  /* GSR SDK context used for samples/config. */
+    gsr_controller_t *controller;    /* Lower-layer controller configured by requests. */
     gsr_operating_point_t active_op; /* Last operating point successfully applied. */
-    gsr_op_request_t last_request;   /* Last application-level request accepted. */
 
     bool has_active_op;              /* True after a successful apply/request. */
     bool initialized;                /* True after gsr_opctrl_init(). */
 } gsr_op_controller_t;
 
-/* Initialize the operating-point controller with the GSR SDK context it controls. */
+/* Initialize the operating-point controller with the GSR controller it drives. */
 gsr_opctrl_status_t gsr_opctrl_init(gsr_op_controller_t *ctrl,
-                                    gsr_context_t *measurement_ctx);
+                                    gsr_controller_t *controller);
 
-/* Translate an application request into concrete SDK configuration fields. Will contain the control algorithm. */
+/* Translate an application request into concrete controller configuration fields. */
 gsr_opctrl_status_t gsr_opctrl_plan(const gsr_op_request_t *request,
                                     gsr_operating_point_t *operating_point);
 
-/* Apply an already planned operating point through the GSR SDK. */
+/* Apply an already planned operating point through the GSR controller. */
 gsr_opctrl_status_t gsr_opctrl_apply(gsr_op_controller_t *ctrl,
                                      const gsr_operating_point_t *operating_point);
 
@@ -90,8 +87,9 @@ gsr_opctrl_status_t gsr_opctrl_request(gsr_op_controller_t *ctrl,
                                        const gsr_op_request_t *request,
                                        gsr_operating_point_t *operating_point);
 
-/* Read one sample through the GSR SDK. */
+/* Read one sample through the GSR controller. */
 gsr_opctrl_status_t gsr_opctrl_read_sample(gsr_op_controller_t *ctrl,
+                                           uint32_t oversample_ratio,
                                            gsr_sample_t *sample);
 
 /* Return the active operating point, or NULL if none has been applied. */
