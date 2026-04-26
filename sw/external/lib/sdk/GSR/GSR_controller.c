@@ -3,7 +3,7 @@
 #define GSR_MAX_CURRENT_NA           ((uint32_t)GSR_IDAC_MAX_CODE * GSR_IDAC_LSB_NA)
 #define GSR_VCO_SUPPLY_VOLTAGE_UV    800000U
 #define GSR_VIN_MIN_UV               330000U
-#define GUARD_IDC_NA                 500U // guard i_dc to prevent going out of range in the next conductance measurement; corresponds to 1 uS of change in conductance
+#define GUARD_IDC_NA                 50U // guard i_dc to prevent going out of range in the next conductance measurement; 500nA corresponds to 1 uS of change in conductance
 #define VCO_VARIANCE                 3U // variance in the VCO frequency-to-voltage conversion, used for sensitivity estimation
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -201,7 +201,7 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
     ctrl->initialized = false;
 
     ctrl->config.current_refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz; // initialize the current refresh rate to the baseline rate
-    return gsr_init(ctrl->config.channel, ctrl->config.baseline_refresh_rate_Hz, ctrl->config.idac_code);
+    return gsr_init(ctrl->config.channel, ctrl->config.current_refresh_rate_Hz, ctrl->config.idac_code);
 
 }
 gsr_status_t gsr_read_sample(gsr_controller_t *ctrl, uint32_t oversample_ratio) {

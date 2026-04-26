@@ -9,7 +9,7 @@
 #include "GSR_sdk.h"
 #include "GSR_controller.h"
 
-#define PRINTF_IN_SIM  0
+#define PRINTF_IN_SIM  1
 #define PRINTF_IN_FPGA 0
 #define TARGET_SIM     1
 
@@ -28,18 +28,19 @@
 
 #define OVERSAMPLE_RATIO      4U
 #define N_CTRL_STEPS          20000000U
-#define SAMPLE_ATTEMPT_LIMIT  10U
-#define N_READ_STEPS          4U
+#define SAMPLE_ATTEMPT_LIMIT  100U
+#define N_READ_STEPS          10U
 
 #define GSR_VCO_SUPPLY_VOLTAGE_UV 800000U
 #define GSR_VIN_MIN_UV            330000U
 
 volatile uint32_t debug __attribute__((section(".xheep_debug_mem")));
 
-void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
-    timer_arm_stop();
-    timer_irq_clear();
-}
+// void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
+//     timer_arm_stop();
+//     timer_irq_clear();
+//     return;
+// }
 
 static void hw_init(void) {
     soc_ctrl_t soc_ctrl;
@@ -56,6 +57,7 @@ static void hw_init(void) {
 
     enable_timer_interrupt();
     timer_irq_enable();
+    // timer_cycles_init();
     timer_start();
 }
 
@@ -111,10 +113,10 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
         uint32_t refresh_rate_Hz = ctrl->config.current_refresh_rate_Hz;
         gsr_status_t st = gsr_read_sample(ctrl, oversample_ratio);
         debug = st;
-        PRINTF("%d: Vin=%lu, G=%lu\n",
-            (int)st,
-            (unsigned long)ctrl->sample.vin_uV,
-            (unsigned long)ctrl->sample.G_nS);
+        // PRINTF("%d: Vin=%lu, G=%lu\n",
+        //     (int)st,
+        //     (unsigned long)ctrl->sample.vin_uV,
+        //     (unsigned long)ctrl->sample.G_nS);
         debug = ctrl->sample.G_nS;
 
         if (st == GSR_STATUS_OK) {
@@ -130,7 +132,6 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
             }
             // wait_for_next_refresh(refresh_rate_Hz);
             attempts++;
-            debug = attempts;
             continue;
         }
 
@@ -192,11 +193,14 @@ static int test_set_config_controller()
     const gsr_sample_t *sample;
     gsr_status_t st = GSR_STATUS_NOT_INITIALIZED;
     PRINTF("GSR controller set_config\n");
-
+    debug = 'set';
     if (init_default_controller(&ctrl) != 0) {
         return -1;
     }
-    debug = 'set';
+    
+    // debug ='wait';
+    // timer_wait_us(2000);
+    debug = 'rd1';
 
     uint8_t steps_done = 0;
     while (steps_done<N_READ_STEPS) {
@@ -219,15 +223,14 @@ static int test_set_config_controller()
         steps_done++;
     }
     
-    ctrl.config.idac_code = 2U; // Set to a different value than default to test the update
+    ctrl.config.idac_code = 10U; // Set to a different value than default to test the update
     ctrl.mode = GSR_CTRL_MODE_PHASIC; // Also update refresh rate
-
+    PRINTF("new: idac_code=%d, max_uidc%d\n", ctrl.config.idac_code, ctrl.max_current_nA);
     st = gsr_controller_set_config(&ctrl);
     if (st != GSR_STATUS_OK) {
         PRINTF("  FAIL: gsr_set_config returned %d\n", st);
         return -1;
     }
-    PRINTF("  gsr_set_config applied new settings: idac_code=%d, phasic_refresh_rate_Hz=%d\n", ctrl.config.idac_code, ctrl.config.phasic_refresh_rate_Hz);
     debug = 'new';
     steps_done = 0;
     // After setting new config, read a sample to verify the new current is applied

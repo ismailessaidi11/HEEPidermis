@@ -75,7 +75,7 @@ module VCO #(
         // x in uV = x in mV * 1000
         x_uV = longint'(vin_uV);
 
-        if (vin_uV < 350_000) return 1;
+        if (vin_uV < 330_000) return 1;
 
         acc = 643;                      // 0.00643 * 1e5
         acc = (acc * x_uV) / 1000;      // multiply by x_mV

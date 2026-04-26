@@ -10,6 +10,7 @@
 
 #define PRINTF_IN_SIM  1
 #define PRINTF_IN_FPGA 0
+#define TARGET_SIM     1
 #if TARGET_SIM && PRINTF_IN_SIM
     #define PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #elif PRINTF_IN_FPGA && !TARGET_SIM
@@ -216,6 +217,7 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     uint32_t counter_p = 0;
     uint32_t counter_n = 0;
     uint32_t frequency_Hz = 0;
+    // PRINTF("now: %lu\n", (unsigned long)now);
 
     //read the values from the counters based on the setup
     if (vco_data.channel == VCO_CHANNEL_DIFFERENTIAL || vco_data.channel == VCO_CHANNEL_P){
@@ -244,6 +246,7 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     }
 
     if (updates_elapsed > 1) {
+        // PRINTF("ue: %lu\n", (unsigned long)updates_elapsed);
         vco_data.last_counter_p = counter_p;
         vco_data.last_counter_n = counter_n;
         vco_data.last_timestamp = now;
