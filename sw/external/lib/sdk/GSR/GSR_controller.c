@@ -142,7 +142,7 @@ gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl) {
     ctrl->config.baseline_refresh_rate_Hz = 1;
     ctrl->config.phasic_refresh_rate_Hz = 20;
     ctrl->config.recovery_refresh_rate_Hz = 5;
-    ctrl->config.idac_code = 5;
+    ctrl->config.idac_code = 20;
     ctrl->amplitude_threshold_nS = 80;
     ctrl->slope_threshold_nS = 40;
     ctrl->settle_threshold_nS = 25;

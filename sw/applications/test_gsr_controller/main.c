@@ -28,7 +28,7 @@
 
 #define OVERSAMPLE_RATIO      4U
 #define N_CTRL_STEPS          20000000U
-#define SAMPLE_ATTEMPT_LIMIT  200000U
+#define SAMPLE_ATTEMPT_LIMIT  10U
 #define N_READ_STEPS          4U
 
 #define GSR_VCO_SUPPLY_VOLTAGE_UV 800000U
@@ -128,7 +128,7 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
             if (refresh_rate_Hz == 0U) {
                 refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
             }
-            wait_for_next_refresh(refresh_rate_Hz);
+            // wait_for_next_refresh(refresh_rate_Hz);
             attempts++;
             debug = attempts;
             continue;
@@ -219,7 +219,7 @@ static int test_set_config_controller()
         steps_done++;
     }
     
-    ctrl.config.idac_code = 20U; // Set to a different value than default to test the update
+    ctrl.config.idac_code = 2U; // Set to a different value than default to test the update
     ctrl.mode = GSR_CTRL_MODE_PHASIC; // Also update refresh rate
 
     st = gsr_controller_set_config(&ctrl);
@@ -241,10 +241,6 @@ static int test_set_config_controller()
             PRINTF("  FAIL: no valid sample stored after gsr_read_sample(osr=1)\n");
             return -1;
         }
-        PRINTF("%d: Vin=%lu, G=%lu\n",
-            steps_done,
-            (unsigned long)sample->vin_uV,
-            (unsigned long)sample->G_nS);
 
         if (sample->current_nA != gsr_current_from_idac_code_nA(ctrl.config.idac_code)) {
             PRINTF("  FAIL: sample current (%lu nA) does not match config (%lu nA)\n",

@@ -19,7 +19,7 @@
 #endif
 
 #define TABLE_SIZE 25
-#define VCO_GAIN 100
+#define VCO_GAIN 1
 // TODO: check if 320mV is accurate + we can discard 820 mV point
 const uint32_t _table_Vin_uV[TABLE_SIZE] ={
     330000, 340000, 360000, 380000, 400000, 
