@@ -38,7 +38,7 @@
 #define SAMPLE_TARGET_PER_OP      4U
 #define SAMPLE_ATTEMPT_LIMIT      32U
 
-void handler_irq_timer(void) {
+void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
     timer_arm_stop();
     timer_irq_clear();
 }
