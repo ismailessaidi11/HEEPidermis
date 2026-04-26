@@ -13,10 +13,10 @@
 
 #define PRINTF_IN_SIM 0
 
-#define VCO_FS_HZ 1
+#define VCO_FS_HZ 10
 #define SYS_FCLK_HZ 10000000
 #if TARGET_SIM
-#define VCO_UPDATE_CC (SYS_FCLK_HZ/(1000*VCO_FS_HZ))
+#define VCO_UPDATE_CC (SYS_FCLK_HZ/(100*VCO_FS_HZ))
 #else
 #define VCO_UPDATE_CC (SYS_FCLK_HZ/VCO_FS_HZ)
 #endif
@@ -138,7 +138,7 @@ int main() {
 
     iDACs_enable(true, false);
     iDAC1_calibrate(IDAC_DEFAULT_CAL);
-    idac_val = 4;
+    idac_val = 50;
     iin_nA = update_dac1(idac_val);
 
     PRINTF("=== Test VCO overflow ===\n");
