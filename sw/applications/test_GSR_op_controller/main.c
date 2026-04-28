@@ -202,7 +202,7 @@ static int test_plan_profiles(void) {
 }
 
 static int collect_samples(gsr_op_controller_t *opctrl,
-                           uint32_t oversample_ratio,
+                           uint32_t M,
                            uint32_t target_samples) {
     uint32_t valid_samples = 0U;
     uint32_t attempts = 0U;
@@ -210,7 +210,7 @@ static int collect_samples(gsr_op_controller_t *opctrl,
     while (valid_samples < target_samples && attempts < SAMPLE_ATTEMPT_LIMIT) {
         gsr_sample_t sample;
         uint32_t refresh_rate_Hz = opctrl->controller->config.current_refresh_rate_Hz;
-        gsr_opctrl_status_t status = gsr_opctrl_read_sample(opctrl, oversample_ratio, &sample);
+        gsr_opctrl_status_t status = gsr_opctrl_read_sample(opctrl, M, &sample);
 
         if (status == GSR_OPCTRL_OK) {
             PRINTF("  sample[%lu]: Vin=%lu uV G=%lu nS I=%lu nA mode=%d\n",

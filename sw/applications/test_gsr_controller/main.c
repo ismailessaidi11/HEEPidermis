@@ -26,7 +26,6 @@
 #define IDAC_DEFAULT_CAL    0U
 #define VREF_DEFAULT_CAL    0b1111111111U
 
-#define OVERSAMPLE_RATIO      4U
 #define N_CTRL_STEPS          20000000U
 #define SAMPLE_ATTEMPT_LIMIT  100U
 #define N_READ_STEPS          10U
@@ -105,13 +104,13 @@ static void wait_for_next_refresh(uint32_t refresh_rate_Hz) {
 }
 
 static int wait_for_read_sample_status(gsr_controller_t *ctrl,
-                                       uint32_t oversample_ratio,
+                                       uint32_t M,
                                        gsr_status_t *final_status) {
     uint32_t attempts = 0U;
 
     while (attempts < SAMPLE_ATTEMPT_LIMIT) {
         uint32_t refresh_rate_Hz = ctrl->config.current_refresh_rate_Hz;
-        gsr_status_t st = gsr_read_sample(ctrl, oversample_ratio);
+        gsr_status_t st = gsr_read_sample(ctrl, M);
         debug = st;
         // PRINTF("%d: Vin=%lu, G=%lu\n",
         //     (int)st,
@@ -135,14 +134,14 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
             continue;
         }
 
-        PRINTF("  FAIL: gsr_read_sample(osr=%lu) returned %d\n",
-               (unsigned long)oversample_ratio,
+        PRINTF("  FAIL: gsr_read_sample(M=%lu) returned %d\n",
+               (unsigned long)M,
                (int)st);
         return -1;
     }
 
-    PRINTF("  FAIL: timed out waiting for gsr_read_sample(osr=%lu)\n",
-           (unsigned long)oversample_ratio);
+    PRINTF("  FAIL: timed out waiting for gsr_read_sample(M=%lu)\n",
+           (unsigned long)M);
     return -1;
 }
 
@@ -151,7 +150,7 @@ static int test_controller_read_sample_single(void) {
     gsr_status_t st = GSR_STATUS_NOT_INITIALIZED;
     const gsr_sample_t *sample;
 
-    PRINTF("GSR controller read_sample (osr=1)\n");
+    PRINTF("GSR controller read_sample (M=1)\n");
 
     if (init_default_controller(&ctrl) != 0) {
         return -1;
@@ -165,7 +164,7 @@ static int test_controller_read_sample_single(void) {
         }
         sample = gsr_get_last_sample(&ctrl);
         if (sample == NULL || !sample->valid) {
-            PRINTF("  FAIL: no valid sample stored after gsr_read_sample(osr=1)\n");
+            PRINTF("  FAIL: no valid sample stored after gsr_read_sample(M=1)\n");
             return -1;
         }
         PRINTF("%d: Vin=%lu, G=%lu\n",
@@ -183,7 +182,7 @@ static int test_controller_read_sample_single(void) {
     }
     
 
-    PRINTF("GSR controller read_sample PASS (osr=1)\n");
+    PRINTF("GSR controller read_sample PASS (M=1)\n");
     return 0;
 }
 
@@ -210,7 +209,7 @@ static int test_set_config_controller()
         }
         sample = gsr_get_last_sample(&ctrl);
         if (sample == NULL || !sample->valid) {
-            PRINTF("  FAIL: no valid sample stored after gsr_read_sample(osr=1)\n");
+            PRINTF("  FAIL: no valid sample stored after gsr_read_sample(M=1)\n");
             return -1;
         }
 
@@ -241,7 +240,7 @@ static int test_set_config_controller()
         }
         sample = gsr_get_last_sample(&ctrl);
         if (sample == NULL || !sample->valid) {
-            PRINTF("  FAIL: no valid sample stored after gsr_read_sample(osr=1)\n");
+            PRINTF("  FAIL: no valid sample stored after gsr_read_sample(M=1)\n");
             return -1;
         }
 

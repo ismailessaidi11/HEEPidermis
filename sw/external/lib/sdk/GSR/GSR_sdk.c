@@ -79,9 +79,9 @@ This improves robustness to sample-to-sample noise at the cost of latency.
 Only valid samples are accumulated; NO_NEW_SAMPLE results are ignored.
 
 */
-gsr_status_t gsr_get_conductance_oversampled(uint32_t *conductance_nS, uint32_t *vin_uV_ret, int oversample_ratio) {
+gsr_status_t gsr_get_conductance_oversampled(uint32_t *conductance_nS, uint32_t *vin_uV_ret, int M) {
     
-    if (conductance_nS == 0 ||vin_uV_ret == 0 || oversample_ratio <= 0) {
+    if (conductance_nS == 0 ||vin_uV_ret == 0 || M <= 0) {
         return GSR_STATUS_INVALID_ARGUMENT;
     }
 
@@ -89,7 +89,7 @@ gsr_status_t gsr_get_conductance_oversampled(uint32_t *conductance_nS, uint32_t 
     uint64_t vin_acc = 0;
     int valid_samples = 0;
 
-    while (valid_samples < oversample_ratio) {
+    while (valid_samples < M) {
         uint32_t conductance_nS = 0, vin_uV = 0;
         gsr_status_t ret = gsr_get_conductance_nS(&conductance_nS, &vin_uV);
 
@@ -107,8 +107,8 @@ gsr_status_t gsr_get_conductance_oversampled(uint32_t *conductance_nS, uint32_t 
         }
     }
 
-    *conductance_nS = (uint32_t)(conductance_acc / (uint64_t)oversample_ratio);
-    *vin_uV_ret = (uint32_t)(vin_acc / (uint64_t)oversample_ratio);
+    *conductance_nS = (uint32_t)(conductance_acc / (uint64_t)M);
+    *vin_uV_ret = (uint32_t)(vin_acc / (uint64_t)M);
     return GSR_STATUS_OK;
 
 }

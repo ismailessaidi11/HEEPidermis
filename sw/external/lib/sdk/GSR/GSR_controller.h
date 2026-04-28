@@ -85,8 +85,8 @@ gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl);
 // Update the controller configuration and apply it to the hardware.
 gsr_status_t gsr_controller_set_config(gsr_controller_t *ctrl);
 
-/* Read one sample (if OSR=1) and store it in the controller. Or (if OSR>1) Average multiple valid samples. NO_NEW_SAMPLE is ignored while waiting. */
-gsr_status_t gsr_read_sample(gsr_controller_t *ctrl, uint32_t oversample_ratio);
+/* Read one sample (if M>=1) and store it in the controller. Or (if M>1) Average multiple valid samples. NO_NEW_SAMPLE is ignored while waiting. */
+gsr_status_t gsr_read_sample(gsr_controller_t *ctrl, uint32_t M);
 
 /* Return the last valid/attempted sample stored in the context. */
 const gsr_sample_t *gsr_get_last_sample(const gsr_controller_t *ctrl);

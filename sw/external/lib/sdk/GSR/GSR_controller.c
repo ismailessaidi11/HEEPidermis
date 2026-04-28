@@ -204,15 +204,15 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
     return gsr_init(ctrl->config.channel, ctrl->config.current_refresh_rate_Hz, ctrl->config.idac_code);
 
 }
-gsr_status_t gsr_read_sample(gsr_controller_t *ctrl, uint32_t oversample_ratio) {
+gsr_status_t gsr_read_sample(gsr_controller_t *ctrl, uint32_t M) {
     uint32_t new_vin_uV = 0U;
     uint32_t new_conductance_nS = 0U;
     gsr_status_t ret;
 
-    if (ctrl == NULL || oversample_ratio == 0U) return GSR_STATUS_INVALID_ARGUMENT;
+    if (ctrl == NULL || M == 0U) return GSR_STATUS_INVALID_ARGUMENT;
 
-    if (oversample_ratio > 1) {
-        ret = gsr_get_conductance_oversampled(&new_conductance_nS, &new_vin_uV, oversample_ratio);
+    if (M > 1) {
+        ret = gsr_get_conductance_oversampled(&new_conductance_nS, &new_vin_uV, M);
     } else {
         ret = gsr_get_conductance_nS(&new_conductance_nS, &new_vin_uV);
     }
