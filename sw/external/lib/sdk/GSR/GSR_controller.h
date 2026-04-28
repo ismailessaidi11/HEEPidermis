@@ -32,11 +32,13 @@ typedef enum {
 /* Hardware configuration required by the measurement layer. */
 typedef struct {
     vco_channel_t channel;       /* VCO path used to reconstruct Vin. */
+    uint8_t D;                 /* is the VCO duty cycle (between 0 and 255 representing D=1) */
     uint32_t baseline_refresh_rate_Hz;
     uint32_t phasic_refresh_rate_Hz;
     uint32_t recovery_refresh_rate_Hz;
     uint32_t current_refresh_rate_Hz;
     uint8_t idac_code;           /* Raw iDAC code used to set the injected current. */
+    uint8_t M;                  /* Number of averaged measurements for 1 sample; 1 means no averaging . */
 } gsr_config_t;
 
 /* One reconstructed GSR sample. */
@@ -85,8 +87,8 @@ gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl);
 // Update the controller configuration and apply it to the hardware.
 gsr_status_t gsr_controller_set_config(gsr_controller_t *ctrl);
 
-/* Read one sample (if M>=1) and store it in the controller. Or (if M>1) Average multiple valid samples. NO_NEW_SAMPLE is ignored while waiting. */
-gsr_status_t gsr_read_sample(gsr_controller_t *ctrl, uint32_t M);
+/* Read one sample (if ctrl->config.M>=1) and store it in the controller. Or (if ctrl->config.M>1) Average multiple valid samples. NO_NEW_SAMPLE is ignored while waiting. */
+gsr_status_t gsr_read_sample(gsr_controller_t *ctrl);
 
 /* Return the last valid/attempted sample stored in the context. */
 const gsr_sample_t *gsr_get_last_sample(const gsr_controller_t *ctrl);

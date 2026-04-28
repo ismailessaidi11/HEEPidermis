@@ -89,7 +89,6 @@ gsr_opctrl_status_t gsr_opctrl_request(gsr_op_controller_t *ctrl,
 
 /* Read one sample through the GSR controller. */
 gsr_opctrl_status_t gsr_opctrl_read_sample(gsr_op_controller_t *ctrl,
-                                           uint32_t oversample_ratio,
                                            gsr_sample_t *sample);
 
 /* Return the active operating point, or NULL if none has been applied. */

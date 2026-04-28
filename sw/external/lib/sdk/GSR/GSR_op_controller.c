@@ -165,7 +165,6 @@ gsr_opctrl_status_t gsr_opctrl_request(gsr_op_controller_t *ctrl,
 }
 
 gsr_opctrl_status_t gsr_opctrl_read_sample(gsr_op_controller_t *ctrl,
-                                           uint32_t oversample_ratio,
                                            gsr_sample_t *sample) {
     gsr_status_t status;
 
@@ -176,7 +175,7 @@ gsr_opctrl_status_t gsr_opctrl_read_sample(gsr_op_controller_t *ctrl,
         return GSR_OPCTRL_NOT_INITIALIZED;
     }
 
-    status = gsr_read_sample(ctrl->controller, oversample_ratio);
+    status = gsr_read_sample(ctrl->controller);
     if (status != GSR_STATUS_OK) {
         return gsr_opctrl_status_from_gsr(status);
     }

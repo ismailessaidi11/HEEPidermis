@@ -139,6 +139,8 @@ gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl) {
     }
 
     ctrl->config.channel = VCO_CHANNEL_P;
+    ctrl->config.D = 255; // 100% duty cycle
+    ctrl->config.M = 1; // no oversampling by default, just take one measurement per sample. This can be increased for more noisy environments at the cost of temporal resolution and power consumption.
     ctrl->config.baseline_refresh_rate_Hz = 1;
     ctrl->config.phasic_refresh_rate_Hz = 20;
     ctrl->config.recovery_refresh_rate_Hz = 5;
@@ -204,15 +206,15 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
     return gsr_init(ctrl->config.channel, ctrl->config.current_refresh_rate_Hz, ctrl->config.idac_code);
 
 }
-gsr_status_t gsr_read_sample(gsr_controller_t *ctrl, uint32_t M) {
+gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
     uint32_t new_vin_uV = 0U;
     uint32_t new_conductance_nS = 0U;
     gsr_status_t ret;
 
-    if (ctrl == NULL || M == 0U) return GSR_STATUS_INVALID_ARGUMENT;
+    if (ctrl == NULL || ctrl->config.M == 0U) return GSR_STATUS_INVALID_ARGUMENT;
 
-    if (M > 1) {
-        ret = gsr_get_conductance_oversampled(&new_conductance_nS, &new_vin_uV, M);
+    if (ctrl->config.M > 1) {
+        ret = gsr_get_conductance_oversampled(&new_conductance_nS, &new_vin_uV, ctrl->config.M);
     } else {
         ret = gsr_get_conductance_nS(&new_conductance_nS, &new_vin_uV);
     }
@@ -279,7 +281,7 @@ gsr_status_t gsr_controller_step(gsr_controller_t *ctrl) {
         return GSR_STATUS_INVALID_ARGUMENT;
     }
 
-    st = gsr_read_sample(ctrl, 1);
+    st = gsr_read_sample(ctrl);
     if (st != GSR_STATUS_OK) return st;
 
     switch (ctrl->mode) {

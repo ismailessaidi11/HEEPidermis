@@ -110,7 +110,7 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
 
     while (attempts < SAMPLE_ATTEMPT_LIMIT) {
         uint32_t refresh_rate_Hz = ctrl->config.current_refresh_rate_Hz;
-        gsr_status_t st = gsr_read_sample(ctrl, M);
+        gsr_status_t st = gsr_read_sample(ctrl);
         debug = st;
         // PRINTF("%d: Vin=%lu, G=%lu\n",
         //     (int)st,
