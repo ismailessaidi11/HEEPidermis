@@ -125,7 +125,8 @@ vco_status_t vco_set_refresh_rate(uint32_t integration_rate_Hz) {
 
     // update the hardware register
     VCO_set_refresh_rate(refresh_rate_CC);
-
+    VCO_trigger();
+    
     return VCO_STATUS_OK;
 }
 
