@@ -161,6 +161,7 @@ static uint32_t compute_conductance_resolution_dB(const gsr_controller_t *ctrl)
 Compute the amplitude of the current sample relative to the baseline in nS.
 */
 static uint32_t compute_amplitude_nS(const gsr_controller_t *ctrl) {
+    if (ctrl->sample.baseline_nS == 0U) return 0U; // this can happen at the very beginning when no baseline has been established yet.
     return (ctrl->sample.G_nS >= ctrl->sample.baseline_nS)
              ? (ctrl->sample.G_nS - ctrl->sample.baseline_nS)
              : (ctrl->sample.baseline_nS - ctrl->sample.G_nS);
@@ -286,6 +287,8 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
     ctrl->sample.G_nS = new_conductance_nS;
     ctrl->sample.vin_uV = new_vin_uV;
     ctrl->sample.current_nA = gsr_current_from_idac_code_nA(ctrl->config.idac_code);
+    // update max current limit based on the new conductance measurement
+    ctrl->max_current_nA = max_current_for_conductance_nS(new_conductance_nS);
     ctrl->sample.conductance_sensitivity_nS = compute_conductance_sensitivity_nS(new_conductance_nS, new_vin_uV, 
                                                                             ctrl->sample.current_nA, ctrl->config.current_refresh_rate_Hz);
     ctrl->sample.resolution_dB = compute_conductance_resolution_dB(ctrl);
@@ -295,22 +298,21 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
         ctrl->sample.baseline_nS = ctrl->sample.G_nS;
         ctrl->sample.prev_G_nS = ctrl->sample.G_nS;
         ctrl->sample.slope_nS = 0;
+        ctrl->sample.amplitude_nS = 0;
         ctrl->mode = GSR_CTRL_MODE_BASELINE;
         ctrl->config.current_refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
-        ctrl->max_current_nA = max_current_for_conductance_nS(new_conductance_nS);
         ctrl->initialized = true;
         return GSR_STATUS_OK;
     }
     // Slope is expressed in nS/s by multiplying the sample difference by fs.
     ctrl->sample.slope_nS = ((int32_t)ctrl->sample.G_nS - (int32_t)ctrl->sample.prev_G_nS) * (int32_t)ctrl->config.current_refresh_rate_Hz;
-
+    
     // Only baseline mode is allowed to slowly adapt the tonic reference.
     if (ctrl->mode == GSR_CTRL_MODE_BASELINE) {
         ctrl->sample.baseline_nS = calculate_baseline(ctrl->sample.baseline_nS, ctrl->sample.G_nS);
     }
+    // compute amplitude after updating the baseline.
     ctrl->sample.amplitude_nS = compute_amplitude_nS(ctrl);
-    // update max current limit based on the new conductance measurement
-    ctrl->max_current_nA = max_current_for_conductance_nS(new_conductance_nS);
 
     return ret;
 }
