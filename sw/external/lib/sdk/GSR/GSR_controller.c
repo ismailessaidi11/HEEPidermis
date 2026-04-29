@@ -5,6 +5,8 @@
 #define GSR_VIN_MIN_UV               330000U
 #define GUARD_IDC_NA                 50U // guard i_dc to prevent going out of range in the next conductance measurement; 500nA corresponds to 1 uS of change in conductance
 #define VCO_VARIANCE                 3U // variance in the VCO frequency-to-voltage conversion, used for sensitivity estimation
+#define F_NYQ_HZ                     2U // Nyquist frequency for the GSR measurement
+#define RESOLUTION_DB_SCALE      100U   // Return value in dB * 100
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -68,21 +70,21 @@ static uint32_t max_current_for_conductance_nS(uint32_t conductance_nS) {
 }
 
 // TODO: Compute the frequency error of the VCO (based on allen deviation measurements)
-static uint32_t gsr_get_frequency_error_Hz(uint32_t vin_uV, uint32_t integration_rate_Hz, uint8_t variance)
+static uint32_t compute_frequency_error_Hz(uint32_t vin_uV, uint32_t integration_rate_Hz, uint8_t variance)
 {
 
     // We use a fixed value for the frequency error based on the Allen deviation measurements of the VCO. 
     #ifdef ADEV_VAR
-        return 0; // not implemented yet
+        return 100; // approximated by 100Hz (see report and hw/vendor/analog-library/VCO/VCO_characteristics/figs/frequency_uncertainty_vs_vin.svg plot for justification)
     #else
         return integration_rate_Hz;
     #endif
 }
 
 // Compute the conductance sensitivity (delta G) of the VCO around a given Vin, based on the i_dc and refresh rate.
-static uint32_t gsr_get_conductance_sensitivity_nS(uint32_t conductance_nS, uint32_t vin_uV, uint32_t current_nA, uint32_t integration_rate_Hz)
+static uint32_t compute_conductance_sensitivity_nS(uint32_t conductance_nS, uint32_t vin_uV, uint32_t current_nA, uint32_t integration_rate_Hz)
 {
-    uint32_t frequency_error_Hz = gsr_get_frequency_error_Hz(vin_uV, integration_rate_Hz, VCO_VARIANCE);
+    uint32_t frequency_error_Hz = compute_frequency_error_Hz(vin_uV, integration_rate_Hz, VCO_VARIANCE);
     uint32_t kvco_Hz_per_V = vco_get_kvco_Hz_per_V(vin_uV);
 
     // Note: 32-bit arithmetic is safe from overflow because
@@ -104,14 +106,72 @@ static uint32_t gsr_get_conductance_sensitivity_nS(uint32_t conductance_nS, uint
 }
 
 /*
+return the Q1 approximation of log2(x), which is 2*log2(x) rounded to the nearest integer.
+Q1 means the value is scaled by 2. Example: return 7 means 3.5
+*/
+static uint32_t approx_log2_q1_u32(uint32_t x)
+{
+    if (x == 0U) return 0U;
+
+    uint32_t n = 0U;
+    uint32_t tmp = x;
+
+    while (tmp >>= 1U) n++;
+
+    uint32_t log2_q1 = n << 1U;
+
+    // Add 0.5 if the bit just below the MSB is set
+    if (n > 0U) log2_q1 += (x >> (n - 1U)) & 1U;
+
+    return log2_q1;
+}
+
+static uint32_t compute_conductance_resolution_dB(const gsr_controller_t *ctrl)
+{
+    uint32_t sensitivity_nS = ctrl->sample.conductance_sensitivity_nS;
+    uint32_t OSR = ctrl->config.current_refresh_rate_Hz / F_NYQ_HZ;
+    uint32_t amplitude_nS = ctrl->sample.amplitude_nS;
+
+    if (sensitivity_nS == 0U || amplitude_nS == 0U || OSR == 0U) return 404;
+
+    uint32_t log2_A_q1 = approx_log2_q1_u32(amplitude_nS);
+    uint32_t log2_OSR_q1 = approx_log2_q1_u32(OSR);
+    uint32_t log2_dG_q1 = approx_log2_q1_u32(sensitivity_nS);
+
+    /*
+     * resolution[dB] = 10 * (log10(OSR) + 2log10(A) - 2log10(DeltaG))
+     *                ≈ 3 * (log2(OSR) + 2log2(A) - 2log2(DeltaG))
+     *
+     * All log2 values are Q1, so result is also Q1 dB. (Q1 means value / 2.)
+     */
+    int32_t resolution_dB_q1 =
+    3 * (((int32_t)log2_A_q1 << 1)
+        + (int32_t)log2_OSR_q1
+        - ((int32_t)log2_dG_q1 << 1));
+
+    if (resolution_dB_q1 <= 0) return 0U;
+
+    /* Convert from Q1 dB to integer dB by dividing by 2 (Q1 means value / 2)  
+     * and multiplying by 100 to return resolution in dB * 100 for better precision. 
+     */
+    return ((uint32_t)resolution_dB_q1 * RESOLUTION_DB_SCALE) >> 1;
+}
+
+/*
+Compute the amplitude of the current sample relative to the baseline in nS.
+*/
+static uint32_t compute_amplitude_nS(const gsr_controller_t *ctrl) {
+    return (ctrl->sample.G_nS >= ctrl->sample.baseline_nS)
+             ? (ctrl->sample.G_nS - ctrl->sample.baseline_nS)
+             : (ctrl->sample.baseline_nS - ctrl->sample.G_nS);
+}
+/*
 Detect whether the current sample indicates the onset of a phasic event using either
 deviation from the baseline or slope magnitude
 */
 static bool event_detected(const gsr_controller_t *ctrl){
 
-    uint32_t amp = (ctrl->sample.G_nS >= ctrl->sample.baseline_nS)
-             ? (ctrl->sample.G_nS - ctrl->sample.baseline_nS)
-             : (ctrl->sample.baseline_nS - ctrl->sample.G_nS);
+    uint32_t amp = compute_amplitude_nS(ctrl);
     uint32_t slope_abs = (ctrl->sample.slope_nS >= 0) ? (uint32_t)ctrl->sample.slope_nS : (uint32_t)(-ctrl->sample.slope_nS);
 
     return (amp >= ctrl->amplitude_threshold_nS) || (slope_abs >= ctrl->slope_threshold_nS);
@@ -121,15 +181,12 @@ static bool event_detected(const gsr_controller_t *ctrl){
 // Check whether the signal has returned close enough to baseline
 static bool signal_settled(const gsr_controller_t *ctrl) {
 
-    uint32_t amp = (ctrl->sample.G_nS >= ctrl->sample.baseline_nS)
-             ? (ctrl->sample.G_nS - ctrl->sample.baseline_nS)
-             : (ctrl->sample.baseline_nS - ctrl->sample.G_nS);
+    uint32_t amp = compute_amplitude_nS(ctrl);
     uint32_t slope_abs = (ctrl->sample.slope_nS >= 0) ? (uint32_t)ctrl->sample.slope_nS : (uint32_t)(-ctrl->sample.slope_nS);
 
     return (amp <= ctrl->settle_threshold_nS) && (slope_abs <= ctrl->settle_threshold_nS);
 
 }
-
 
 // Load a default controller configuration for standard GSR operation.
 gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl) {
@@ -189,10 +246,11 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
         .prev_G_nS = 0U,
         .vin_uV = 0U,
         .baseline_nS = 0U,
+        .amplitude_nS = 0U,
         .slope_nS = 0,
         .current_nA = gsr_current_from_idac_code_nA(ctrl->config.idac_code),
         .conductance_sensitivity_nS = 0U,
-        .timestamp_ticks = 0U,
+        .resolution_dB = 0U,
         .valid = false
     };
     ctrl->sample = init_sample;
@@ -228,9 +286,9 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
     ctrl->sample.G_nS = new_conductance_nS;
     ctrl->sample.vin_uV = new_vin_uV;
     ctrl->sample.current_nA = gsr_current_from_idac_code_nA(ctrl->config.idac_code);
-    ctrl->sample.timestamp_ticks = 0U;
-    ctrl->sample.conductance_sensitivity_nS = gsr_get_conductance_sensitivity_nS(new_conductance_nS, new_vin_uV, 
+    ctrl->sample.conductance_sensitivity_nS = compute_conductance_sensitivity_nS(new_conductance_nS, new_vin_uV, 
                                                                             ctrl->sample.current_nA, ctrl->config.current_refresh_rate_Hz);
+    ctrl->sample.resolution_dB = compute_conductance_resolution_dB(ctrl);
     ctrl->sample.valid = true;
     
     if (!ctrl->initialized) {
@@ -250,6 +308,7 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
     if (ctrl->mode == GSR_CTRL_MODE_BASELINE) {
         ctrl->sample.baseline_nS = calculate_baseline(ctrl->sample.baseline_nS, ctrl->sample.G_nS);
     }
+    ctrl->sample.amplitude_nS = compute_amplitude_nS(ctrl);
     // update max current limit based on the new conductance measurement
     ctrl->max_current_nA = max_current_for_conductance_nS(new_conductance_nS);
 

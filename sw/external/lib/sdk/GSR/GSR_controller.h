@@ -48,10 +48,11 @@ typedef struct {
     uint32_t vin_uV;        /* Reconstructed front-end voltage from the VCO readout. */
     uint32_t baseline_nS;
     int32_t slope_nS;
+    uint32_t amplitude_nS;        /* Absolute change in conductance compared to the baseline. */
     
     uint32_t current_nA;         /* Injected current used for this sample's conductance computation. */
-    uint32_t conductance_sensitivity_nS; /* Estimated conductance sensitivity (deltaG) around the current operation point, used for control decisions. */
-    uint32_t timestamp_ticks;    /* Optional acquisition timestamp; 0 when no timer is connected. */
+    uint32_t conductance_sensitivity_nS; /* Estimated conductance sensitivity (delta G) in nS around the current operation point */
+    uint32_t resolution_dB;     /* Estimated conductance resolution in dB around the current operation point, used as QoS metric. */
     // uint32_t power_nW;                   /* Estimated power consumption of the measurement, used for control decisions. */
     /*
      * True only after a successful VCO read and conductance conversion.
