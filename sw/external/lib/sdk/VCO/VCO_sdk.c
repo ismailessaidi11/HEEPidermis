@@ -21,6 +21,8 @@
 
 #define TABLE_SIZE 25
 #define VCO_GAIN 1
+#define VCO_ACCEL_RATIO 10 // The ratio by which the VCO is accelerated in simulation to allow faster testing. The refresh rate and integration rate are divided by this factor in simulation mode.
+
 // TODO: check if 320mV is accurate + we can discard 820 mV point
 const uint32_t _table_Vin_uV[TABLE_SIZE] ={
     330000, 340000, 360000, 380000, 400000, 
@@ -89,7 +91,7 @@ vco_status_t vco_initialize(vco_channel_t channel, uint32_t integration_rate_Hz)
     // set the VCO refresh rate
     g_integration_rate_Hz = integration_rate_Hz;
     #if TARGET_SIM
-        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/(1000*integration_rate_Hz));
+        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/(VCO_ACCEL_RATIO*integration_rate_Hz));
     #else
         uint32_t refresh_rate_CC = (SYS_FCLK_HZ/integration_rate_Hz);
     #endif
@@ -115,7 +117,7 @@ vco_status_t vco_set_refresh_rate(uint32_t integration_rate_Hz) {
     }
 
     #if TARGET_SIM
-        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/(1000*integration_rate_Hz));
+        uint32_t refresh_rate_CC = (SYS_FCLK_HZ/(VCO_ACCEL_RATIO*integration_rate_Hz));
     #else
         uint32_t refresh_rate_CC = (SYS_FCLK_HZ/integration_rate_Hz);
     #endif
