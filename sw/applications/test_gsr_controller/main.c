@@ -26,9 +26,8 @@
 #define IDAC_DEFAULT_CAL    15U
 #define VREF_DEFAULT_CAL    0b1111111111U
 
-#define N_CTRL_STEPS          20000000U
 #define SAMPLE_ATTEMPT_LIMIT  10U
-#define N_READ_STEPS          5U
+#define N_READ_STEPS          2U
 
 #define GSR_VCO_SUPPLY_VOLTAGE_UV 800000U
 #define GSR_VIN_MIN_UV            330000U
@@ -37,12 +36,8 @@
 volatile uint32_t debug __attribute__((section(".xheep_debug_mem")));
 
 void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
-    // timer_arm_stop(); // That stops the counter, which is exactly what VCO_sdk must not see.
-    // debug = 0xB1;       // entered ISR
     timer_irq_clear();
-    // debug = 0xB2;       // cleared irq
     timer_irq_disable();
-    // debug = 0xB3;       // disabled irq
     debug = 'wake';
     return;
 }
@@ -51,8 +46,6 @@ static void hw_init(void) {
     soc_ctrl_t soc_ctrl;
     soc_ctrl.base_addr = mmio_region_from_addr((uintptr_t)SOC_CTRL_START_ADDRESS);
     soc_ctrl_set_frequency(&soc_ctrl, SYS_FCLK_HZ);
-
-    // timer_cycles_init();
 
     REFs_calibrate(IREF_DEFAULT_CAL, IREF1);
     REFs_calibrate(VREF_DEFAULT_CAL, VREF);
@@ -99,31 +92,15 @@ static uint32_t refresh_wait_cycles(uint32_t refresh_rate_Hz) {
 static void wait_for_next_refresh(uint32_t refresh_rate_Hz) {
     uint32_t now;
 
-    if (refresh_rate_Hz == 0U) {
-        return;
-    }
-
-    // debug = 0xA1;                       // entered wait
+    if (refresh_rate_Hz == 0U) return;
     now = timer_get_cycles();
-
-    // debug = 0xA2;                       // got current time
-    uint32_t wake_at = now + refresh_wait_cycles(refresh_rate_Hz) - 5700U; // Subtract some cycles to account for the overhead of the timer operations and ensure we wake up shortly after the next refresh starts.
+    uint32_t wake_at = now + refresh_wait_cycles(refresh_rate_Hz);// - 5700U; // Subtract some cycles to account for the overhead of the timer operations and ensure we wake up shortly after the next refresh starts.
                                                                             // 5700 should be computed after profiling gsr_read_sample
-
-    // debug = 0xA3;                       // computed threshold
     timer_irq_clear();
-    
-    // debug = 0xA4;                       // enabled irq
     timer_arm_set(wake_at);
-
-    // debug = 0xA5;                       // cleared irq
     timer_irq_enable();
-
-    // debug = 0xA6;                       // armed compare
     debug = 'slep';
     asm volatile ("wfi");
-
-    // debug = 0xA7;                       // resumed from wfi
 }
 
 static int wait_for_read_sample_status(gsr_controller_t *ctrl,
@@ -134,16 +111,8 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
 
     while (attempts < SAMPLE_ATTEMPT_LIMIT) {
         uint32_t refresh_rate_Hz = ctrl->config.current_refresh_rate_Hz;
-        // we want to profile gsr_read_sample
-        // timer_start();
         gsr_status_t st = gsr_read_sample(ctrl);
-        // read_sample_cycles = timer_stop();
-        // debug = read_sample_cycles;
         debug = st;
-        // PRINTF("%d: Vin=%lu, G=%lu\n",
-        //     (int)st,
-        //     (unsigned long)ctrl->sample.vin_uV,
-        //     (unsigned long)ctrl->sample.G_nS);
         debug = ctrl->sample.G_nS;
 
         if (st == GSR_STATUS_OK) {
@@ -156,12 +125,16 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
         }
 
         if (st == GSR_STATUS_NOT_INITIALIZED ||
-            st == GSR_STATUS_NO_NEW_SAMPLE ||
-            st == GSR_STATUS_MISSED_UPDATE) {
+            st == GSR_STATUS_NO_NEW_SAMPLE ) {
             if (refresh_rate_Hz == 0U) {
                 refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
             }
             wait_for_next_refresh(refresh_rate_Hz);
+            attempts++;
+            continue;
+        }
+
+        if (st == GSR_STATUS_MISSED_UPDATE) { // poll again immediately 
             attempts++;
             continue;
         }
@@ -177,48 +150,23 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
     return -1;
 }
 
-static int test_controller_read_sample_single(void) {
-    gsr_controller_t ctrl;
-    gsr_status_t st = GSR_STATUS_NOT_INITIALIZED;
-    const gsr_sample_t *sample;
-
-    PRINTF("GSR controller read_sample (M=1)\n");
-
-    if (init_default_controller(&ctrl) != 0) {
-        return -1;
+// Stupid waiting loop (should be timer based for real application)
+static void wait_cycles_busy(uint32_t cycles)
+{
+    uint32_t start = timer_get_cycles();
+    while ((uint32_t)(timer_get_cycles() - start) < cycles) {
     }
-
-    uint8_t steps_done = 0;
-    while (steps_done<N_READ_STEPS) {
-        debug = steps_done; // For debugging: track the number of attempts/reads
-        if (wait_for_read_sample_status(&ctrl, 1U, &st) != 0) {
-            return -1;
-        }
-        sample = gsr_get_last_sample(&ctrl);
-        if (sample == NULL || !sample->valid) {
-            PRINTF("  FAIL: no valid sample stored after gsr_read_sample(M=1)\n");
-            return -1;
-        }
-        PRINTF("%d: Vin=%lu, G=%lu\n",
-            steps_done,
-            (unsigned long)sample->vin_uV,
-            (unsigned long)sample->G_nS);
-
-        if (sample->current_nA != gsr_current_from_idac_code_nA(ctrl.config.idac_code)) {
-            PRINTF("  FAIL: sample current (%lu nA) does not match config (%lu nA)\n",
-                (unsigned long)sample->current_nA,
-                (unsigned long)gsr_current_from_idac_code_nA(ctrl.config.idac_code));
-            return -1;
-        }
-        steps_done++;
-    }
-    
-
-    PRINTF("GSR controller read_sample PASS (M=1)\n");
-    return 0;
 }
 
-static int test_set_config_controller()
+/*
+This test function tests:
+- reading samples with the default controller configuration
+- changing the controller configuration (current, refresh rate)
+- timer based sampling
+- sleeping the VCO and waking it up again then read sample 
+- tests duty cycling the VCO to save power and read samples 
+*/
+static int test_all()
 {
     gsr_controller_t ctrl;
     const gsr_sample_t *sample;
@@ -230,9 +178,12 @@ static int test_set_config_controller()
     }
     
     debug ='wait';
-    timer_wait_us(5500); // for VCO to start 
-    debug = 'rd1';
+    timer_wait_us(5700); // for VCO to start (tuned to have the second read attempt happen at the second refresh so that we have 2 samples to differentiate)
+    debug = 'tst1';
 
+    /* 
+    * ----------------------------Test 1: basic config + sample reading (timer based)-----------------------------
+    */
     uint8_t steps_done = 0;
     while (steps_done<N_READ_STEPS) {
     
@@ -253,7 +204,9 @@ static int test_set_config_controller()
         }
         steps_done++;
     }
-    
+    /* 
+    * ----------------------------Test 2: updated config (refresh rate + current) + sample reading (timer based)-----------------------------
+    */
     ctrl.config.idac_code = 15U; // Set to a different value than default to test the update
     ctrl.mode = GSR_CTRL_MODE_PHASIC; // Also update refresh rate
     PRINTF("new: idac_code=%d, max_uidc%d\n", ctrl.config.idac_code, ctrl.max_current_nA);
@@ -262,7 +215,7 @@ static int test_set_config_controller()
         PRINTF("  FAIL: gsr_set_config returned %d\n", st);
         return -1;
     }
-    debug = 'new';
+    debug = 'tst2';
     steps_done = 0;
     // After setting new config, read a sample to verify the new current is applied
     while (steps_done<N_READ_STEPS) {
@@ -284,11 +237,121 @@ static int test_set_config_controller()
         }
         steps_done++;
     }
+    /* 
+    * ----------------------------Test 3: turn VCO off and on + read -----------------------------
+    */
+    debug = 'tst3';
+    vco_enable(ctrl.config.channel, false);
+    timer_wait_us(5500);  // just wait some time for the lols
+    debug = 'on';
+    vco_enable(ctrl.config.channel, true);
+    timer_wait_us(1000);  // time it takes for VCO to start TODO: determine this (1ms --> 1'000 cc): it depends if it was successfull or not 
+    steps_done = 0;
+    while (steps_done<N_READ_STEPS) {
+        
+        if (wait_for_read_sample_status(&ctrl, 1U, &st) != 0) {
+            return -1;
+        }
+        sample = gsr_get_last_sample(&ctrl);
+        if (sample == NULL || !sample->valid) {
+            PRINTF("  FAIL: no valid sample stored after gsr_read_sample(M=1)\n");
+            return -1;
+        }
 
+        if (sample->current_nA != gsr_current_from_idac_code_nA(ctrl.config.idac_code)) {
+            PRINTF("  FAIL: sample current (%lu nA) does not match config (%lu nA)\n",
+                (unsigned long)sample->current_nA,
+                (unsigned long)gsr_current_from_idac_code_nA(ctrl.config.idac_code));
+            return -1;
+        }
+        steps_done++;
+    }
     PRINTF("GSR controller set_config PASS\n");
+
+    /* 
+    * ----------------------------Test 4: test duty cycling VCO  -----------------------------
+    */
+    timer_wait_us(10000);
+    uint32_t on_cycles;
+    uint32_t total_cycles;
+    uint32_t off_cycles;
+
+    PRINTF("GSR controller duty_cycle\n");
+    debug = 'tst4';
+
+    on_cycles = refresh_wait_cycles(ctrl.config.current_refresh_rate_Hz);
+
+    /* LOW power: 25% duty cycle => 1 refresh ON, 3 refresh periods OFF. */
+    ctrl.config.D = 64U;
+    total_cycles = (on_cycles * 255U) / ctrl.config.D;
+    off_cycles = total_cycles - on_cycles;
+    debug = 'L25';
+    vco_enable(ctrl.config.channel, false);
+    wait_cycles_busy(off_cycles);
+    debug = 'on';
+    vco_enable(ctrl.config.channel, true);
+    st = gsr_read_sample(&ctrl); /* first tap: seed timestamp / start interval */
+    debug = st;
+    wait_cycles_busy(on_cycles);
+    st = gsr_read_sample(&ctrl); /* second tap: get conductance */
+    if (st != GSR_STATUS_OK) {
+        PRINTF("  FAIL: low-duty second read returned %d\n", st);
+        return -1;
+    }
+    sample = gsr_get_last_sample(&ctrl);
+    if (sample == NULL || !sample->valid) {
+        PRINTF("  FAIL: no valid low-duty sample\n");
+        return -1;
+    }
+    debug = sample->G_nS;
+
+    /* MID power: 50% duty cycle => 1 refresh ON, 1 refresh period OFF. */
+    ctrl.config.D = 128U;
+    total_cycles = (on_cycles * 255U) / ctrl.config.D;
+    off_cycles = total_cycles - on_cycles;
+    debug = 'M50';
+    vco_enable(ctrl.config.channel, false);
+    wait_cycles_busy(off_cycles);
+    vco_enable(ctrl.config.channel, true);
+    st = gsr_read_sample(&ctrl);
+    debug = st;
+    wait_cycles_busy(on_cycles);
+    st = gsr_read_sample(&ctrl);
+    if (st != GSR_STATUS_OK) {
+        PRINTF("  FAIL: mid-duty second read returned %d\n", st);
+        return -1;
+    }
+    sample = gsr_get_last_sample(&ctrl);
+    if (sample == NULL || !sample->valid) {
+        PRINTF("  FAIL: no valid mid-duty sample\n");
+        return -1;
+    }
+    debug = sample->G_nS;
+
+    /* HIGH power: 100% duty cycle => no OFF gap. */
+    ctrl.config.D = 255U;
+    total_cycles = on_cycles;
+    off_cycles = 0U;
+    debug = 'H10';
+    vco_enable(ctrl.config.channel, true);
+    st = gsr_read_sample(&ctrl);
+    debug = st;
+    wait_cycles_busy(on_cycles);
+    st = gsr_read_sample(&ctrl);
+    if (st != GSR_STATUS_OK) {
+        PRINTF("  FAIL: high-duty second read returned %d\n", st);
+        return -1;
+    }
+    sample = gsr_get_last_sample(&ctrl);
+    if (sample == NULL || !sample->valid) {
+        PRINTF("  FAIL: no valid high-duty sample\n");
+        return -1;
+    }
+    debug = sample->G_nS;
+
+    vco_enable(ctrl.config.channel, false);
     return 0;
 }
-
 
 int main(void)
 {
@@ -298,8 +361,7 @@ int main(void)
 
     int failures = 0;
 
-    // failures += (test_controller_read_sample_single() != 0) ? 1 : 0;
-    failures += (test_set_config_controller() != 0) ? 1 : 0;
+    failures += (test_all() != 0) ? 1 : 0;
 
     if (failures == 0) {
         debug = 'pass';
