@@ -285,6 +285,6 @@ vco_status_t vco_enable(vco_channel_t channel, bool enable)
     default:
         return VCO_STATUS_INVALID_CONFIGURATION;
     }
-    vco_data.config_changed = true; // set the configuration changed flag since we are disabling the VCO, this will make sure that when we enable it again, we don't use old counter values that might be stale and give wrong frequency readings until we get 2 new samples.
+    vco_data.config_changed = true; // set the configuration changed flag since we are disabling the VCO, this will make sure that when we enable it again, we don't use old timestamps that keep track of readings which get biased here. 
     return VCO_STATUS_OK;
 }
