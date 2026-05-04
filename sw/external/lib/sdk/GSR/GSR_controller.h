@@ -19,15 +19,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "GSR_sdk.h"
-
-
-// Operating modes of the adaptive controller.
-typedef enum {
-    GSR_CTRL_MODE_INIT = 0,
-    GSR_CTRL_MODE_BASELINE,
-    GSR_CTRL_MODE_PHASIC,
-    GSR_CTRL_MODE_RECOVERY
-} gsr_ctrl_mode_t;
+#include "config_profiles.h"
+#include "GSR_types.h"
 
 /* Hardware configuration required by the measurement layer. */
 typedef struct {

@@ -9,7 +9,7 @@
 #include "GSR_sdk.h"
 #include "GSR_controller.h"
 
-#define PRINTF_IN_SIM  1
+#define PRINTF_IN_SIM  0
 #define PRINTF_IN_FPGA 0
 #define TARGET_SIM     1
 
@@ -23,30 +23,36 @@
 
 #define SYS_FCLK_HZ         10000000U
 #define IREF_DEFAULT_CAL    255U
-#define IDAC_DEFAULT_CAL    0U
+#define IDAC_DEFAULT_CAL    15U
 #define VREF_DEFAULT_CAL    0b1111111111U
 
 #define N_CTRL_STEPS          20000000U
-#define SAMPLE_ATTEMPT_LIMIT  100U
-#define N_READ_STEPS          10U
+#define SAMPLE_ATTEMPT_LIMIT  10U
+#define N_READ_STEPS          5U
 
 #define GSR_VCO_SUPPLY_VOLTAGE_UV 800000U
 #define GSR_VIN_MIN_UV            330000U
 
+#define VCO_ACCEL_RATIO 100 // The ratio by which the VCO is accelerated in simulation to allow faster testing. The refresh rate and integration rate are divided by this factor in simulation mode.
 volatile uint32_t debug __attribute__((section(".xheep_debug_mem")));
 
-// void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
-//     timer_arm_stop();
-//     timer_irq_clear();
-//     return;
-// }
+void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
+    // timer_arm_stop(); // That stops the counter, which is exactly what VCO_sdk must not see.
+    // debug = 0xB1;       // entered ISR
+    timer_irq_clear();
+    // debug = 0xB2;       // cleared irq
+    timer_irq_disable();
+    // debug = 0xB3;       // disabled irq
+    debug = 'wake';
+    return;
+}
 
 static void hw_init(void) {
     soc_ctrl_t soc_ctrl;
     soc_ctrl.base_addr = mmio_region_from_addr((uintptr_t)SOC_CTRL_START_ADDRESS);
     soc_ctrl_set_frequency(&soc_ctrl, SYS_FCLK_HZ);
 
-    timer_cycles_init();
+    // timer_cycles_init();
 
     REFs_calibrate(IREF_DEFAULT_CAL, IREF1);
     REFs_calibrate(VREF_DEFAULT_CAL, VREF);
@@ -54,9 +60,9 @@ static void hw_init(void) {
     iDACs_enable(true, false);
     iDAC1_calibrate(IDAC_DEFAULT_CAL);
 
-    enable_timer_interrupt();
+    enable_timer_interrupt();   // Enable the timer machine-level interrupt
     timer_irq_enable();
-    // timer_cycles_init();
+    timer_cycles_init();
     timer_start();
 }
 
@@ -85,32 +91,54 @@ static int init_default_controller(gsr_controller_t *ctrl) {
 
 static uint32_t refresh_wait_cycles(uint32_t refresh_rate_Hz) {
 #if TARGET_SIM
-    return SYS_FCLK_HZ / (1000U * refresh_rate_Hz);
+    return SYS_FCLK_HZ / (VCO_ACCEL_RATIO * refresh_rate_Hz);
 #else
     return SYS_FCLK_HZ / refresh_rate_Hz;
 #endif
 }
-
 static void wait_for_next_refresh(uint32_t refresh_rate_Hz) {
+    uint32_t now;
+
     if (refresh_rate_Hz == 0U) {
         return;
     }
 
-    timer_cycles_init();
-    timer_irq_enable();
-    timer_arm_start(refresh_wait_cycles(refresh_rate_Hz));
-    asm volatile ("wfi");
+    // debug = 0xA1;                       // entered wait
+    now = timer_get_cycles();
+
+    // debug = 0xA2;                       // got current time
+    uint32_t wake_at = now + refresh_wait_cycles(refresh_rate_Hz) - 5700U; // Subtract some cycles to account for the overhead of the timer operations and ensure we wake up shortly after the next refresh starts.
+                                                                            // 5700 should be computed after profiling gsr_read_sample
+
+    // debug = 0xA3;                       // computed threshold
     timer_irq_clear();
+    
+    // debug = 0xA4;                       // enabled irq
+    timer_arm_set(wake_at);
+
+    // debug = 0xA5;                       // cleared irq
+    timer_irq_enable();
+
+    // debug = 0xA6;                       // armed compare
+    debug = 'slep';
+    asm volatile ("wfi");
+
+    // debug = 0xA7;                       // resumed from wfi
 }
 
 static int wait_for_read_sample_status(gsr_controller_t *ctrl,
                                        uint32_t M,
                                        gsr_status_t *final_status) {
     uint32_t attempts = 0U;
+    uint32_t read_sample_cycles = 0U;
 
     while (attempts < SAMPLE_ATTEMPT_LIMIT) {
         uint32_t refresh_rate_Hz = ctrl->config.current_refresh_rate_Hz;
+        // we want to profile gsr_read_sample
+        // timer_start();
         gsr_status_t st = gsr_read_sample(ctrl);
+        // read_sample_cycles = timer_stop();
+        // debug = read_sample_cycles;
         debug = st;
         // PRINTF("%d: Vin=%lu, G=%lu\n",
         //     (int)st,
@@ -120,6 +148,10 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
 
         if (st == GSR_STATUS_OK) {
             *final_status = st;
+            if (refresh_rate_Hz == 0U) {
+                refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
+            }
+            wait_for_next_refresh(refresh_rate_Hz);
             return 0;
         }
 
@@ -129,7 +161,7 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
             if (refresh_rate_Hz == 0U) {
                 refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
             }
-            // wait_for_next_refresh(refresh_rate_Hz);
+            wait_for_next_refresh(refresh_rate_Hz);
             attempts++;
             continue;
         }
@@ -197,8 +229,8 @@ static int test_set_config_controller()
         return -1;
     }
     
-    // debug ='wait';
-    // timer_wait_us(2000);
+    debug ='wait';
+    timer_wait_us(5500); // for VCO to start 
     debug = 'rd1';
 
     uint8_t steps_done = 0;
@@ -222,7 +254,7 @@ static int test_set_config_controller()
         steps_done++;
     }
     
-    ctrl.config.idac_code = 10U; // Set to a different value than default to test the update
+    ctrl.config.idac_code = 15U; // Set to a different value than default to test the update
     ctrl.mode = GSR_CTRL_MODE_PHASIC; // Also update refresh rate
     PRINTF("new: idac_code=%d, max_uidc%d\n", ctrl.config.idac_code, ctrl.max_current_nA);
     st = gsr_controller_set_config(&ctrl);

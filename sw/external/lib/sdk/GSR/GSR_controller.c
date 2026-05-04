@@ -199,10 +199,11 @@ gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl) {
     ctrl->config.channel = VCO_CHANNEL_P;
     ctrl->config.D = 255; // 100% duty cycle
     ctrl->config.M = 1; // no oversampling by default, just take one measurement per sample. This can be increased for more noisy environments at the cost of temporal resolution and power consumption.
-    ctrl->config.baseline_refresh_rate_Hz = 1;
-    ctrl->config.phasic_refresh_rate_Hz = 20;
+    ctrl->config.baseline_refresh_rate_Hz = 2;
+    ctrl->config.phasic_refresh_rate_Hz = 10;
     ctrl->config.recovery_refresh_rate_Hz = 5;
-    ctrl->config.idac_code = 20;
+    ctrl->config.idac_code = 20; // 0.8 uA 
+    ctrl->config.current_refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz; // initialize the current refresh rate to the baseline rate
     ctrl->amplitude_threshold_nS = 80;
     ctrl->slope_threshold_nS = 40;
     ctrl->settle_threshold_nS = 25;
@@ -261,8 +262,8 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
 
     ctrl->initialized = false;
 
-    ctrl->config.current_refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz; // initialize the current refresh rate to the baseline rate
-    return gsr_init(ctrl->config.channel, ctrl->config.current_refresh_rate_Hz, ctrl->config.idac_code);
+    // initialize with the baseline refresh rate
+    return gsr_init(ctrl->config.channel, ctrl->config.baseline_refresh_rate_Hz, ctrl->config.idac_code);
 
 }
 gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
