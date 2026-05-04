@@ -49,6 +49,7 @@ typedef struct {
     uint32_t        last_counter_n;      // previous coarse/count value for second channel if running in differential mode
     uint32_t        last_timestamp;      // timer_get_cycles() at previous read
     bool            has_prev;            // false until first valid sample
+    bool            config_changed;      // true if the configuration has changed or VCO got disabled
     vco_channel_t   channel;             // channel configuration
 } vco_sdk_t;
 
@@ -63,5 +64,8 @@ uint32_t vco_get_kvco_Hz_per_V(uint32_t vin_uV);
 
 // Read the latest Vin value reconstructed from the VCO frequency.
 vco_status_t vco_get_Vin_uV(uint32_t *vin_uV);
+
+// Enable or disable the VCO.
+vco_status_t vco_enable(vco_channel_t channel, bool enable);
 
 #endif /* VCO_SDK_H_ */

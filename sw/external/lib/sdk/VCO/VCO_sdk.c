@@ -22,6 +22,8 @@
 #define TABLE_SIZE 25
 #define VCO_GAIN 1
 #define VCO_ACCEL_RATIO 100 // The ratio by which the VCO is accelerated in simulation to allow faster testing. The refresh rate and integration rate are divided by this factor in simulation mode.
+#define VCO_DECODER_PHASES 62u
+#define VCO_READOUT_DELAY_CC 3u
 
 // TODO: check if 320mV is accurate + we can discard 820 mV point
 const uint32_t _table_Vin_uV[TABLE_SIZE] ={
@@ -129,6 +131,7 @@ vco_status_t vco_set_refresh_rate(uint32_t integration_rate_Hz) {
     VCO_set_refresh_rate(refresh_rate_CC);
     VCO_trigger();
     
+    vco_data.config_changed = true; // set the configuration changed flag since changing config biases timestamp that we use in vco_get_Vin_uV.
     return VCO_STATUS_OK;
 }
 
@@ -208,7 +211,7 @@ on the setup that was initialized.
 vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
 
     //make sure the VCO is properly initialized
-    if (vin_uV == NULL){
+    if (vin_uV == 0){
         return VCO_STATUS_INVALID_ARGUMENT;
     }
 
@@ -217,75 +220,71 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     }
 
     uint32_t now = timer_get_cycles();
-    uint32_t counter_p = 0;
-    uint32_t counter_n = 0;
-    uint32_t frequency_Hz = 0;
-    // PRINTF("now: %lu\n", (unsigned long)now);
-
-    //read the values from the counters based on the setup
-    if (vco_data.channel == VCO_CHANNEL_DIFFERENTIAL || vco_data.channel == VCO_CHANNEL_P){
-        counter_p = VCOp_get_coarse();
-    }
-
-    if (vco_data.channel == VCO_CHANNEL_DIFFERENTIAL || vco_data.channel == VCO_CHANNEL_N){
-        counter_n = VCOn_get_coarse();
-    }
-
-    //since we use the difference of the counter, we need to have at least 2 samples.
-    if (!vco_data.has_prev) {
-        vco_data.last_counter_p = counter_p;
-        vco_data.last_counter_n = counter_n;
-        vco_data.last_timestamp = now;
-        vco_data.has_prev = true;
-        return VCO_STATUS_NO_NEW_SAMPLE; // no new sample as it was just initialized
-    }
-
     uint32_t elapsed_cycles = now - vco_data.last_timestamp;
-    uint32_t updates_elapsed = elapsed_cycles / vco_data.refresh_cycles;
 
-    //make sure we didn't miss any updates, or if there are new values.
-    if (updates_elapsed == 0) {
+    uint32_t readout_delay = (vco_data.refresh_cycles > VCO_READOUT_DELAY_CC)
+                           ? VCO_READOUT_DELAY_CC
+                           : 0u;
+    uint64_t sample_ready_cycles = (uint64_t)vco_data.refresh_cycles + readout_delay;
+    uint64_t missed_ready_cycles =
+        ((uint64_t)vco_data.refresh_cycles * 2u) + readout_delay;
+
+    // check that before the other 
+    if (vco_data.config_changed) {
+        vco_data.last_timestamp = now; // reset timestamp because it was biased by config change
+        elapsed_cycles = 0; // if the configuration has changed, we consider that we just got a new sample to allow the function to return the new value as soon as it's ready, and not wait for 2 refresh cycles which would be the case if we consider that we just read a sample, since the previous counter values are stale and might give wrong frequency readings until we get 2 new samples.
+        vco_data.config_changed = false;
+    }
+
+    // Make sure the delayed refresh train has latched the decoder count.
+    if ((uint64_t)elapsed_cycles < sample_ready_cycles) {
         return VCO_STATUS_NO_NEW_SAMPLE;   // no new refresh yet
     }
 
-    if (updates_elapsed > 1) {
-        // PRINTF("ue: %lu\n", (unsigned long)updates_elapsed);
-        vco_data.last_counter_p = counter_p;
-        vco_data.last_counter_n = counter_n;
+    if ((uint64_t)elapsed_cycles >= missed_ready_cycles) {
         vco_data.last_timestamp = now;
+        vco_data.has_prev = true;
         return VCO_STATUS_MISSED_UPDATE;   // missed one or more updates
     }
 
-    uint32_t delta_p = counter_p - vco_data.last_counter_p;
-    uint32_t delta_n = counter_n - vco_data.last_counter_n;
-    uint32_t delta_counts = 0;
+    if (!vco_data.has_prev) {
+        vco_data.last_timestamp += vco_data.refresh_cycles;
+        vco_data.has_prev = true;
+        return VCO_STATUS_NO_NEW_SAMPLE;   // discard the first partial interval
+    }
 
-    //transform the count into frequency.
-    switch (vco_data.channel)
+    uint32_t decoder_count = VCO_get_count();
+    uint32_t frequency_Hz = (uint32_t)(((uint64_t)decoder_count * g_integration_rate_Hz) / VCO_DECODER_PHASES);
+
+    *vin_uV  = interpolate_Vin_uV(frequency_Hz);
+
+    vco_data.last_timestamp += vco_data.refresh_cycles;
+
+    return VCO_STATUS_OK;
+}
+
+/*
+This function enables/disables the VCO and handles vco_data
+*/
+vco_status_t vco_enable(vco_channel_t channel, bool enable)
+{
+    switch (channel)
     {
+    case VCO_CHANNEL_NONE:
+        break;
     case VCO_CHANNEL_P:
-        frequency_Hz = delta_p * g_integration_rate_Hz;
+        VCOp_enable(enable);
         break;
     case VCO_CHANNEL_N:
-        frequency_Hz = delta_n * g_integration_rate_Hz;
+        VCOn_enable(enable);
         break;
     case VCO_CHANNEL_DIFFERENTIAL:
-        frequency_Hz = (delta_n - delta_p) * g_integration_rate_Hz;
+        VCOp_enable(enable);
+        VCOn_enable(enable);
         break;
     default:
         return VCO_STATUS_INVALID_CONFIGURATION;
     }
-    frequency_Hz = frequency_Hz * VCO_GAIN; // apply the gain to get the actual frequency, this is because the count is based on the number of oscillations in the refresh period, and we want to get the frequency in Hz.
-    PRINTF("f: %d\n", frequency_Hz);
-    *vin_uV  = interpolate_Vin_uV(frequency_Hz); // already handles out of bound cases and gives the corresponding min/max values.
-    if (*vin_uV == VCO_SUPPLY_VOLTAGE_UV || *vin_uV == _table_Vin_uV[0]) {
-        *vin_uV = _table_Vin_uV[0]; // cap the output to the min voltage
-        return VCO_STATUS_OUT_OF_RANGE;
-    }
-
-    vco_data.last_counter_p = counter_p;
-    vco_data.last_counter_n = counter_n;
-    vco_data.last_timestamp = now;
-
+    vco_data.config_changed = true; // set the configuration changed flag since we are disabling the VCO, this will make sure that when we enable it again, we don't use old counter values that might be stale and give wrong frequency readings until we get 2 new samples.
     return VCO_STATUS_OK;
 }
