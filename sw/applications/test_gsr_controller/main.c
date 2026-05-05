@@ -36,8 +36,7 @@
 volatile uint32_t debug __attribute__((section(".xheep_debug_mem")));
 
 void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
-    timer_irq_clear();
-    timer_irq_disable();
+    vco_handle_timer_irq();
     debug = 'wake';
     return;
 }
@@ -298,6 +297,7 @@ static int test_all()
         PRINTF("  FAIL: low-duty second read returned %d\n", st);
         return -1;
     }
+    debug = st;
     sample = gsr_get_last_sample(&ctrl);
     if (sample == NULL || !sample->valid) {
         PRINTF("  FAIL: no valid low-duty sample\n");
@@ -321,6 +321,7 @@ static int test_all()
         PRINTF("  FAIL: mid-duty second read returned %d\n", st);
         return -1;
     }
+    debug = st;
     sample = gsr_get_last_sample(&ctrl);
     if (sample == NULL || !sample->valid) {
         PRINTF("  FAIL: no valid mid-duty sample\n");
@@ -342,6 +343,7 @@ static int test_all()
         PRINTF("  FAIL: high-duty second read returned %d\n", st);
         return -1;
     }
+    debug = st;
     sample = gsr_get_last_sample(&ctrl);
     if (sample == NULL || !sample->valid) {
         PRINTF("  FAIL: no valid high-duty sample\n");
@@ -349,7 +351,91 @@ static int test_all()
     }
     debug = sample->G_nS;
 
-    vco_enable(ctrl.config.channel, false);
+    /* 
+    * ----------------------------Test 5: test duty cycling through new VCO SDK implementation -----------------------------
+    */
+    timer_wait_us(10000);
+    debug = 'tst5';
+
+    ctrl.config.D = 64U;
+    total_cycles = (on_cycles * 255U) / ctrl.config.D;
+    off_cycles = total_cycles - on_cycles;
+    debug = 'L25';
+    st = gsr_controller_set_config(&ctrl);
+    if (st != GSR_STATUS_OK) {
+        PRINTF("  FAIL: low-duty gsr_controller_set_config returned %d\n", st);
+        return -1;
+    }
+    wait_cycles_busy(off_cycles);
+    st = gsr_read_sample(&ctrl); /* first tap: seed timestamp / start interval */
+    debug = st;
+    wait_cycles_busy(on_cycles);
+    st = gsr_read_sample(&ctrl); /* second tap: get conductance */
+    if (st != GSR_STATUS_OK) {
+        PRINTF("  FAIL: low-duty second read returned %d\n", st);
+        return -1;
+    }
+    debug = st;
+    sample = gsr_get_last_sample(&ctrl);
+    if (sample == NULL || !sample->valid) {
+        PRINTF("  FAIL: no valid mid-duty sample\n");
+        return -1;
+    }
+    debug = sample->G_nS;
+
+    ctrl.config.D = 128U;
+    total_cycles = (on_cycles * 255U) / ctrl.config.D;
+    off_cycles = total_cycles - on_cycles;
+    debug = 'M50';
+    st = gsr_controller_set_config(&ctrl);
+    if (st != GSR_STATUS_OK) {
+        PRINTF("  FAIL: mid-duty gsr_controller_set_config returned %d\n", st);
+        return -1;
+    }
+    wait_cycles_busy(off_cycles);
+    st = gsr_read_sample(&ctrl);
+    debug = st;
+    wait_cycles_busy(on_cycles);
+    st = gsr_read_sample(&ctrl);
+    if (st != GSR_STATUS_OK) {
+        PRINTF("  FAIL: mid-duty second read returned %d\n", st);
+        return -1;
+    }
+    debug = st;
+    sample = gsr_get_last_sample(&ctrl);
+    if (sample == NULL || !sample->valid) {
+        PRINTF("  FAIL: no valid mid-duty VCO-SDK sample\n");
+        return -1;
+    }
+    debug = sample->G_nS;
+
+    ctrl.config.D = 255U;
+    total_cycles = on_cycles;
+    off_cycles = 0U;
+    debug = 'H10';
+    st = gsr_controller_set_config(&ctrl);
+    if (st != GSR_STATUS_OK) {
+        PRINTF("  FAIL: high-duty gsr_controller_set_config returned %d\n", st);
+        return -1;
+    }
+    wait_cycles_busy(off_cycles);
+    st = gsr_read_sample(&ctrl);
+    debug = st;
+    wait_cycles_busy(on_cycles);
+    st = gsr_read_sample(&ctrl);
+    if (st != GSR_STATUS_OK) {
+        PRINTF("  FAIL: high-duty second read returned %d\n", st);
+        return -1;
+    }
+    debug = st;
+    sample = gsr_get_last_sample(&ctrl);
+    if (sample == NULL || !sample->valid) {
+        PRINTF("  FAIL: no valid high-duty VCO-SDK sample\n");
+        return -1;
+    }
+    debug = sample->G_nS;
+    timer_wait_us(10000); // wait for VCO to get automatically reenabled after the OFF period
+
     return 0;
 }
 

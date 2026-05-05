@@ -41,10 +41,10 @@ static gsr_status_t controller_set_current(gsr_controller_t *ctrl, uint8_t idac_
     return GSR_STATUS_OK;
 }
 
-// Reconfigure the VCO refresh rate while keeping the selected channel unchanged.
-static gsr_status_t controller_set_refresh(gsr_controller_t *ctrl, gsr_ctrl_mode_t mode) {
-
+static gsr_status_t controller_set_vco(gsr_controller_t *ctrl, gsr_ctrl_mode_t mode, uint8_t D) {
+    if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
     uint32_t new_rate_Hz;
+    gsr_status_t ret;
     switch (mode) {
         case GSR_CTRL_MODE_BASELINE:
             new_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
@@ -59,7 +59,9 @@ static gsr_status_t controller_set_refresh(gsr_controller_t *ctrl, gsr_ctrl_mode
             return GSR_STATUS_INVALID_ARGUMENT;
     }
     ctrl->config.current_refresh_rate_Hz = new_rate_Hz; // keep track of the current refresh rate in the controller state for reference
-    return gsr_status_from_vco(vco_set_refresh_rate(new_rate_Hz));
+    ret = gsr_status_from_vco(vco_set_refresh_rate(new_rate_Hz));
+    if (ret != GSR_STATUS_OK) return ret;
+    return gsr_status_from_vco(vco_duty_cycle(ctrl->config.channel, D));
 }
 
 static uint32_t max_current_for_conductance_nS(uint32_t conductance_nS) {
@@ -228,7 +230,7 @@ gsr_status_t gsr_controller_set_config(gsr_controller_t *ctrl) {
     if (ret != GSR_STATUS_OK) return ret;
     
     // setup the config of the VCO Hardware registers
-    ret = controller_set_refresh(ctrl, ctrl->mode);
+    ret = controller_set_vco(ctrl, ctrl->mode, config->D);
     if (ret != GSR_STATUS_OK) return ret;
 
     return ret;
@@ -357,7 +359,7 @@ gsr_status_t gsr_controller_step(gsr_controller_t *ctrl) {
             // retune_current_for_baseline(ctrl);
 
             if (event_detected(ctrl)) {
-                st = controller_set_refresh(ctrl, GSR_CTRL_MODE_PHASIC);
+                st = controller_set_vco(ctrl, GSR_CTRL_MODE_PHASIC, ctrl->config.D);
                 if (st != GSR_STATUS_OK) return st;
 
                 ctrl->config.current_refresh_rate_Hz = ctrl->config.phasic_refresh_rate_Hz;
@@ -369,7 +371,7 @@ gsr_status_t gsr_controller_step(gsr_controller_t *ctrl) {
         // Phasic mode increases sampling rate to better capture fast events.
         case GSR_CTRL_MODE_PHASIC:
             if (signal_settled(ctrl)) {
-                st = controller_set_refresh(ctrl, GSR_CTRL_MODE_RECOVERY);
+                st = controller_set_vco(ctrl, GSR_CTRL_MODE_RECOVERY, ctrl->config.D);
                 if (st != GSR_STATUS_OK) return st;
 
                 ctrl->config.current_refresh_rate_Hz = ctrl->config.recovery_refresh_rate_Hz;
@@ -381,7 +383,7 @@ gsr_status_t gsr_controller_step(gsr_controller_t *ctrl) {
         // Recovery mode uses an intermediate sampling rate until the signal is stable again.
         case GSR_CTRL_MODE_RECOVERY:
             if (!signal_settled(ctrl)) {
-                st = controller_set_refresh(ctrl, GSR_CTRL_MODE_PHASIC);
+                st = controller_set_vco(ctrl, GSR_CTRL_MODE_PHASIC, ctrl->config.D);
                 if (st != GSR_STATUS_OK) return st;
 
                 ctrl->config.current_refresh_rate_Hz = ctrl->config.phasic_refresh_rate_Hz;
@@ -395,7 +397,7 @@ gsr_status_t gsr_controller_step(gsr_controller_t *ctrl) {
             if (ctrl->recovery_counter >= ctrl->recovery_count_required) {
                 // retune_current_for_baseline(ctrl); // CHANGE: removed since Esmail will be working on this.
 
-                st = controller_set_refresh(ctrl, GSR_CTRL_MODE_BASELINE);
+                st = controller_set_vco(ctrl, GSR_CTRL_MODE_BASELINE, ctrl->config.D);
                 if (st != GSR_STATUS_OK) return st;
 
                 ctrl->config.current_refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;

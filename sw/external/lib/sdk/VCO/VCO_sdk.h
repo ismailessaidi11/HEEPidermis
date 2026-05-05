@@ -44,12 +44,16 @@ Internal state used by the VCO SDK to reconstruct frequency from
 successive counter readings.
  */
 typedef struct {
-    uint32_t        refresh_cycles;      // VCO refresh period in system cycles
+    uint32_t        integration_time_CC; // VCO integration period in system cycles (refresh between 2 measurements)
+    uint32_t        off_cycles;          // sleep window in system cycles
     uint32_t        last_counter_p;      // previous coarse/count value
     uint32_t        last_counter_n;      // previous coarse/count value for second channel if running in differential mode
     uint32_t        last_timestamp;      // timer_get_cycles() at previous read
+    uint8_t         duty_cycle_code;     // D in [1,255]
     bool            has_prev;            // false until first valid sample
     bool            config_changed;      // true if the configuration has changed or VCO got disabled
+    // bool            sample_ready;        // true when one ON window completed and can be consumed by vco_get_Vin_uV
+    bool            vco_enabled;         // true when the selected VCO channel is currently enabled
     vco_channel_t   channel;             // channel configuration
 } vco_sdk_t;
 
@@ -67,5 +71,14 @@ vco_status_t vco_get_Vin_uV(uint32_t *vin_uV);
 
 // Enable or disable the VCO.
 vco_status_t vco_enable(vco_channel_t channel, bool enable);
+
+// applies duty cycling to the VCO by setting its duty cycle D (between 0 and 255 representing D=1)
+vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D);
+
+// Indicates whether a duty-cycled ON window completed and a fresh sample may be read.
+// bool vco_sample_ready(void);
+
+// Advance the duty-cycle state machine from the timer IRQ handler.
+void vco_handle_timer_irq(void);
 
 #endif /* VCO_SDK_H_ */
