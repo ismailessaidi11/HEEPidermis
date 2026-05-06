@@ -10,35 +10,14 @@
 
 #include <stddef.h>
 
-#define GSR_OPCTRL_PROFILE_COUNT 3U
-
-typedef struct {
-    uint8_t idac_code;
-} gsr_range_profile_t;
-
-typedef struct {
-    uint32_t refresh_rate_Hz;
-} gsr_sensitivity_profile_t;
-
-static const gsr_range_profile_t k_range_profiles[GSR_OPCTRL_PROFILE_COUNT] = {
-    { .idac_code = 5U  },
-    { .idac_code = 100U },
-    { .idac_code = 200U },
-};
-
-static const gsr_sensitivity_profile_t k_sensitivity_profiles[GSR_OPCTRL_PROFILE_COUNT] = {
-    { .refresh_rate_Hz = 1U  },
-    { .refresh_rate_Hz = 5U  },
-    { .refresh_rate_Hz = 20U },
-};
-
 static bool gsr_opctrl_is_valid_request(const gsr_op_request_t *request) {
     if (request == NULL) {
         return false;
     }
 
-    return (request->range <= GSR_RANGE_HIGH) &&
-           (request->sensitivity <= GSR_SENSITIVITY_HIGH);
+    return (request->range <= HIGH) &&
+           (request->resolution <= HIGH) &&
+           (request->power <= HIGH);
 }
 
 static gsr_opctrl_status_t gsr_opctrl_status_from_gsr(gsr_status_t status) {
@@ -71,73 +50,64 @@ gsr_opctrl_status_t gsr_opctrl_init(gsr_op_controller_t *ctrl,
     return GSR_OPCTRL_OK;
 }
 
+/* Translate an application request into concrete controller configuration fields with preconfigured profiles 
+* (TODO: will be replaced with dynamic profiling) 
+*/
 gsr_opctrl_status_t gsr_opctrl_plan(const gsr_op_request_t *request,
-                                    gsr_operating_point_t *operating_point) {
+                                    gsr_controller_t *operating_point) {
     if (!gsr_opctrl_is_valid_request(request) || operating_point == NULL) {
         return GSR_OPCTRL_INVALID_REQUEST;
     }
 
-    operating_point->request = *request;
+    // resolve the request into concrete config fields using the preconfigured profiles in config_profiles.h
     operating_point->config.channel = VCO_CHANNEL_P;
     operating_point->config.idac_code = k_range_profiles[(uint32_t)request->range].idac_code;
-    operating_point->config.current_refresh_rate_Hz = k_sensitivity_profiles[(uint32_t)request->sensitivity].refresh_rate_Hz;
-    // don't matter
-    operating_point->config.baseline_refresh_rate_Hz = 0U;
-    operating_point->config.phasic_refresh_rate_Hz = 0U;
-    operating_point->config.recovery_refresh_rate_Hz = 0U;
+    /*
+    * We want to control refresh rate because it impacts resolution. 
+    * However the way it is implemented now in GSR_controller is by changing modes (which makes sense but is a bit rigid)
+    * So to change refresh rate we select the corresponding mode.
+    * NOTE 1: In GSR_controller we should decouple refresh rate and modes because what if we want high refresh rates for baseline? 
+    * NOTE 2: preconfigured values are in config_profiles.h.
+    * TLDR: For now: resolution -> refresh rate (through OSR) -> mode with higher refresh rate in the controller config
+    */
+    operating_point->mode = k_resolution_profiles[(uint32_t)request->resolution].mode;
 
+    operating_point->config.baseline_refresh_rate_Hz = k_refresh_profiles[0].refresh_rate_Hz;
+    operating_point->config.recovery_refresh_rate_Hz = k_refresh_profiles[1].refresh_rate_Hz;
+    operating_point->config.phasic_refresh_rate_Hz =  k_refresh_profiles[2].refresh_rate_Hz;
+
+    // placeholder for now because duty cycling the VCO is not implemented yet.
+    operating_point->config.D = k_power_profiles[(uint32_t)request->power].D;
+    
     return GSR_OPCTRL_OK;
 }
 
+/* Apply an already planned operating point through the GSR controller. */
 gsr_opctrl_status_t gsr_opctrl_apply(gsr_op_controller_t *ctrl,
-                                     const gsr_operating_point_t *operating_point) {
+                                     const gsr_controller_t *operating_point) {
     gsr_status_t status;
     gsr_config_t merged_config;
-    gsr_ctrl_mode_t mode;
 
-    if (ctrl == NULL || operating_point == NULL) {
-        return GSR_OPCTRL_INVALID_REQUEST;
-    }
-    if (!ctrl->initialized || ctrl->controller == NULL) {
-        return GSR_OPCTRL_NOT_INITIALIZED;
-    }
+    if (ctrl == NULL || operating_point == NULL) return GSR_OPCTRL_INVALID_REQUEST;
+    if (!ctrl->initialized || ctrl->controller == NULL) return GSR_OPCTRL_NOT_INITIALIZED;
 
-    merged_config = ctrl->controller->config;
-    merged_config.channel = operating_point->config.channel;
-    merged_config.idac_code = operating_point->config.idac_code;
+    // apply the resolved operating point to the controller
+    ctrl->controller->config = operating_point->config;
+    ctrl->controller->mode = operating_point->mode;
 
-    mode = ctrl->controller->mode;
-    if (mode == GSR_CTRL_MODE_INIT) {
-        mode = GSR_CTRL_MODE_BASELINE;
-        ctrl->controller->mode = mode;
-    }
-
-    if (mode == GSR_CTRL_MODE_BASELINE) {
-        merged_config.baseline_refresh_rate_Hz = operating_point->config.current_refresh_rate_Hz;
-    } else if (mode == GSR_CTRL_MODE_PHASIC) {
-        merged_config.phasic_refresh_rate_Hz = operating_point->config.current_refresh_rate_Hz;
-    } else if (mode == GSR_CTRL_MODE_RECOVERY) {
-        merged_config.recovery_refresh_rate_Hz = operating_point->config.current_refresh_rate_Hz;
-    } else {
-        return GSR_OPCTRL_INVALID_REQUEST;
-    }
-
-    ctrl->controller->config = merged_config;
     status = gsr_controller_set_config(ctrl->controller);
     if (status != GSR_STATUS_OK) {
         return gsr_opctrl_status_from_gsr(status);
     }
 
-    ctrl->active_op = *operating_point;
-    ctrl->active_op.config = ctrl->controller->config;
     ctrl->has_active_op = true;
     return GSR_OPCTRL_OK;
 }
 
 gsr_opctrl_status_t gsr_opctrl_request(gsr_op_controller_t *ctrl,
                                        const gsr_op_request_t *request,
-                                       gsr_operating_point_t *operating_point) {
-    gsr_operating_point_t planned_operating_point;
+                                       gsr_controller_t *operating_point) {
+    gsr_controller_t planned_operating_point;
     gsr_opctrl_status_t status;
 
     if (ctrl == NULL || request == NULL) {
@@ -182,52 +152,6 @@ gsr_opctrl_status_t gsr_opctrl_read_sample(gsr_op_controller_t *ctrl,
 
     *sample = ctrl->controller->sample;
     return GSR_OPCTRL_OK;
-}
-
-const gsr_operating_point_t *gsr_opctrl_get_active(const gsr_op_controller_t *ctrl) {
-    if (ctrl == NULL || !ctrl->has_active_op) {
-        return NULL;
-    }
-
-    return &ctrl->active_op;
-}
-
-gsr_opctrl_status_t gsr_opctrl_handle_range_event(gsr_op_controller_t *ctrl,
-                                                  gsr_opctrl_range_event_t event,
-                                                  gsr_operating_point_t *operating_point) {
-    gsr_op_request_t request;
-
-    if (ctrl == NULL) {
-        return GSR_OPCTRL_INVALID_REQUEST;
-    }
-    if (!ctrl->initialized || ctrl->controller == NULL || !ctrl->has_active_op) {
-        return GSR_OPCTRL_NOT_INITIALIZED;
-    }
-
-    if (event == GSR_OPCTRL_RANGE_EVENT_NONE) {
-        if (operating_point != NULL) {
-            *operating_point = ctrl->active_op;
-        }
-        return GSR_OPCTRL_OK;
-    }
-
-    request = ctrl->active_op.request;
-
-    if (event == GSR_OPCTRL_RANGE_EVENT_VIN_TOO_LOW) {
-        if (request.range == GSR_RANGE_LOW) {
-            return GSR_OPCTRL_UNSATISFIABLE;
-        }
-        request.range = (gsr_range_t)((uint32_t)request.range - 1U);
-    } else if (event == GSR_OPCTRL_RANGE_EVENT_VIN_TOO_HIGH) {
-        if (request.range == GSR_RANGE_HIGH) {
-            return GSR_OPCTRL_UNSATISFIABLE;
-        }
-        request.range = (gsr_range_t)((uint32_t)request.range + 1U);
-    } else {
-        return GSR_OPCTRL_INVALID_REQUEST;
-    }
-
-    return gsr_opctrl_request(ctrl, &request, operating_point);
 }
 
 void gsr_opctrl_shutdown(gsr_op_controller_t *ctrl) {
