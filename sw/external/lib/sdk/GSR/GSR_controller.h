@@ -44,9 +44,6 @@ typedef struct {
     uint32_t amplitude_nS;        /* Absolute change in conductance compared to the baseline. */
     
     uint32_t current_nA;         /* Injected current used for this sample's conductance computation. */
-    uint32_t conductance_sensitivity_nS; /* Estimated conductance sensitivity (delta G) in nS around the current operation point */
-    uint32_t resolution_dB;     /* Estimated conductance resolution in dB around the current operation point, used as QoS metric. */
-    // uint32_t power_nW;                   /* Estimated power consumption of the measurement, used for control decisions. */
     /*
      * True only after a successful VCO read and conductance conversion.
      * False means the sample must not be used for control/math; the numeric
@@ -55,12 +52,17 @@ typedef struct {
     bool valid;
 } gsr_sample_t;
 
+typedef struct{
+    uint32_t conductance_sensitivity_nS; /* Estimated conductance sensitivity (delta G) in nS around the current operation point */
+    uint32_t resolution_dB;     /* Estimated conductance resolution in dB around the current operation point, used as QoS metric. */
+    // uint32_t power_nW;                   /* Estimated power consumption of the measurement, used for control decisions. */
+} gsr_metrics_t;
+
 //Controller state and configuration parameters.
 typedef struct {
     gsr_ctrl_mode_t mode;
     gsr_config_t config;
     gsr_sample_t sample;
-
     uint32_t amplitude_threshold_nS;
     uint32_t slope_threshold_nS;
     uint32_t settle_threshold_nS;
@@ -86,6 +88,9 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl);
 
 /* Return the last valid/attempted sample stored in the context. */
 const gsr_sample_t *gsr_get_last_sample(const gsr_controller_t *ctrl);
+
+/* Returns performance metrics (sensitivity, power, resolution)*/
+gsr_metrics_t get_metrics(gsr_controller_t *ctrl);
 
 //Execute one controller update step from the latest available sample.
 gsr_status_t gsr_controller_step(gsr_controller_t *ctrl);

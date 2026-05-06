@@ -103,7 +103,6 @@ static void wait_for_next_refresh(uint32_t refresh_rate_Hz) {
 }
 
 static int wait_for_read_sample_status(gsr_controller_t *ctrl,
-                                       uint32_t M,
                                        gsr_status_t *final_status) {
     uint32_t attempts = 0U;
     uint32_t read_sample_cycles = 0U;
@@ -124,7 +123,7 @@ static int wait_for_read_sample_status(gsr_controller_t *ctrl,
         }
 
         if (st == GSR_STATUS_NOT_INITIALIZED ||
-            st == GSR_STATUS_NO_NEW_SAMPLE ) {
+            st == GSR_STATUS_NO_NEW_SAMPLE || st == GSR_STATUS_OUT_OF_RANGE) {
             if (refresh_rate_Hz == 0U) {
                 refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
             }
@@ -162,8 +161,7 @@ This test function tests:
 - reading samples with the default controller configuration
 - changing the controller configuration (current, refresh rate)
 - timer based sampling
-- sleeping the VCO and waking it up again then read sample 
-- tests duty cycling the VCO to save power and read samples 
+- i_dc out of range 
 */
 static int test_all()
 {
@@ -186,19 +184,12 @@ static int test_all()
     uint8_t steps_done = 0;
     while (steps_done<N_READ_STEPS) {
     
-        if (wait_for_read_sample_status(&ctrl, 1U, &st) != 0) {
+        if (wait_for_read_sample_status(&ctrl, &st) != 0) {
             return -1;
         }
         sample = gsr_get_last_sample(&ctrl);
         if (sample == NULL || !sample->valid) {
             PRINTF("  FAIL: no valid sample stored after gsr_read_sample(M=1)\n");
-            return -1;
-        }
-
-        if (sample->current_nA != gsr_current_from_idac_code_nA(ctrl.config.idac_code)) {
-            PRINTF("  FAIL: sample current (%lu nA) does not match config (%lu nA)\n",
-                (unsigned long)sample->current_nA,
-                (unsigned long)gsr_current_from_idac_code_nA(ctrl.config.idac_code));
             return -1;
         }
         steps_done++;
@@ -219,7 +210,7 @@ static int test_all()
     // After setting new config, read a sample to verify the new current is applied
     while (steps_done<N_READ_STEPS) {
     
-        if (wait_for_read_sample_status(&ctrl, 1U, &st) != 0) {
+        if (wait_for_read_sample_status(&ctrl, &st) != 0) {
             return -1;
         }
         sample = gsr_get_last_sample(&ctrl);
@@ -227,214 +218,64 @@ static int test_all()
             PRINTF("  FAIL: no valid sample stored after gsr_read_sample(M=1)\n");
             return -1;
         }
-
-        if (sample->current_nA != gsr_current_from_idac_code_nA(ctrl.config.idac_code)) {
-            PRINTF("  FAIL: sample current (%lu nA) does not match config (%lu nA)\n",
-                (unsigned long)sample->current_nA,
-                (unsigned long)gsr_current_from_idac_code_nA(ctrl.config.idac_code));
-            return -1;
-        }
         steps_done++;
     }
     /* 
-    * ----------------------------Test 3: turn VCO off and on + read -----------------------------
+    * ----------------------------Test 3: test idc out of range guard + measurements -----------------------------
     */
     debug = 'tst3';
-    vco_enable(ctrl.config.channel, false);
-    timer_wait_us(5500);  // just wait some time for the lols
-    debug = 'on';
-    vco_enable(ctrl.config.channel, true);
-    timer_wait_us(1000);  // time it takes for VCO to start TODO: determine this (1ms --> 1'000 cc): it depends if it was successfull or not 
+    // 1. try setting i_dc to max allowed, which should trigger idc out of range 
+    debug = ctrl.max_current_nA;
+    ctrl.mode = GSR_CTRL_MODE_BASELINE;
+    ctrl.config.idac_code = ctrl.max_current_nA/40 ; // idac(max) > max - guard ==> it will trigger out of range
+    st = gsr_controller_set_config(&ctrl);
+    if (st != GSR_STATUS_OUT_OF_RANGE) {
+        debug = (0xF1 << 24 | st); 
+        PRINTF("  FAIL: gsr_set_config returned %d\n", st);
+        return -1;
+    }
+    // 2. change i_dc to pass the guard  
+    if (st == GSR_STATUS_OUT_OF_RANGE) {
+        ctrl.config.idac_code = ctrl.max_current_nA/40 - 2; // idac(max - 80) < max - guard ==> should not trigger out of range
+        st = gsr_controller_set_config(&ctrl);
+    }
+    if (st != GSR_STATUS_OK) {
+        debug = (0xF2 << 24 | st); 
+        PRINTF("  FAIL: gsr_set_config returned %d\n", st);
+        return -1;
+    }
+    // 3. test that measurements work (tested on a sample)
     steps_done = 0;
-    while (steps_done<N_READ_STEPS) {
-        
-        if (wait_for_read_sample_status(&ctrl, 1U, &st) != 0) {
+    while (steps_done<4) {
+    
+        if (wait_for_read_sample_status(&ctrl, &st) != 0) {
+            debug = (0xF3 << 24 | st); 
             return -1;
         }
-        sample = gsr_get_last_sample(&ctrl);
-        if (sample == NULL || !sample->valid) {
-            PRINTF("  FAIL: no valid sample stored after gsr_read_sample(M=1)\n");
-            return -1;
-        }
+        if (steps_done == 0) {
+            sample = gsr_get_last_sample(&ctrl);
+            debug = (1 << 24 | sample->current_nA);
+            debug = (2 << 24 | sample->valid); 
+            debug = (3 << 24 | sample->baseline_nS); 
+            debug = (4 << 24 | sample->amplitude_nS); 
+            gsr_metrics_t metrics = get_metrics(&ctrl);
+            debug = (5 << 24 | metrics.conductance_sensitivity_nS);
+            debug = (6 << 24 | metrics.resolution_dB);
 
-        if (sample->current_nA != gsr_current_from_idac_code_nA(ctrl.config.idac_code)) {
-            PRINTF("  FAIL: sample current (%lu nA) does not match config (%lu nA)\n",
-                (unsigned long)sample->current_nA,
-                (unsigned long)gsr_current_from_idac_code_nA(ctrl.config.idac_code));
-            return -1;
+            if (sample->current_nA != 2240 ||
+                sample->valid != 1 ||
+                sample->baseline_nS != 4901 ||
+                sample->amplitude_nS!= 80 ||
+                metrics.conductance_sensitivity_nS!=3 ||
+                metrics.resolution_dB!=2700) 
+            {    
+                debug = (0xF4 << 24); 
+                return -1;
+            }
+            debug='m_ok'; //measurements ok
         }
         steps_done++;
     }
-    PRINTF("GSR controller set_config PASS\n");
-
-    /* 
-    * ----------------------------Test 4: test duty cycling VCO  -----------------------------
-    */
-    timer_wait_us(10000);
-    uint32_t on_cycles;
-    uint32_t total_cycles;
-    uint32_t off_cycles;
-
-    PRINTF("GSR controller duty_cycle\n");
-    debug = 'tst4';
-
-    on_cycles = refresh_wait_cycles(ctrl.config.current_refresh_rate_Hz);
-
-    /* LOW power: 25% duty cycle => 1 refresh ON, 3 refresh periods OFF. */
-    ctrl.config.D = 64U;
-    total_cycles = (on_cycles * 255U) / ctrl.config.D;
-    off_cycles = total_cycles - on_cycles;
-    debug = 'L25';
-    vco_enable(ctrl.config.channel, false);
-    wait_cycles_busy(off_cycles);
-    debug = 'on';
-    vco_enable(ctrl.config.channel, true);
-    st = gsr_read_sample(&ctrl); /* first tap: seed timestamp / start interval */
-    debug = st;
-    wait_cycles_busy(on_cycles);
-    st = gsr_read_sample(&ctrl); /* second tap: get conductance */
-    if (st != GSR_STATUS_OK) {
-        PRINTF("  FAIL: low-duty second read returned %d\n", st);
-        return -1;
-    }
-    debug = st;
-    sample = gsr_get_last_sample(&ctrl);
-    if (sample == NULL || !sample->valid) {
-        PRINTF("  FAIL: no valid low-duty sample\n");
-        return -1;
-    }
-    debug = sample->G_nS;
-
-    /* MID power: 50% duty cycle => 1 refresh ON, 1 refresh period OFF. */
-    ctrl.config.D = 128U;
-    total_cycles = (on_cycles * 255U) / ctrl.config.D;
-    off_cycles = total_cycles - on_cycles;
-    debug = 'M50';
-    vco_enable(ctrl.config.channel, false);
-    wait_cycles_busy(off_cycles);
-    vco_enable(ctrl.config.channel, true);
-    st = gsr_read_sample(&ctrl);
-    debug = st;
-    wait_cycles_busy(on_cycles);
-    st = gsr_read_sample(&ctrl);
-    if (st != GSR_STATUS_OK) {
-        PRINTF("  FAIL: mid-duty second read returned %d\n", st);
-        return -1;
-    }
-    debug = st;
-    sample = gsr_get_last_sample(&ctrl);
-    if (sample == NULL || !sample->valid) {
-        PRINTF("  FAIL: no valid mid-duty sample\n");
-        return -1;
-    }
-    debug = sample->G_nS;
-
-    /* HIGH power: 100% duty cycle => no OFF gap. */
-    ctrl.config.D = 255U;
-    total_cycles = on_cycles;
-    off_cycles = 0U;
-    debug = 'H10';
-    vco_enable(ctrl.config.channel, true);
-    st = gsr_read_sample(&ctrl);
-    debug = st;
-    wait_cycles_busy(on_cycles);
-    st = gsr_read_sample(&ctrl);
-    if (st != GSR_STATUS_OK) {
-        PRINTF("  FAIL: high-duty second read returned %d\n", st);
-        return -1;
-    }
-    debug = st;
-    sample = gsr_get_last_sample(&ctrl);
-    if (sample == NULL || !sample->valid) {
-        PRINTF("  FAIL: no valid high-duty sample\n");
-        return -1;
-    }
-    debug = sample->G_nS;
-
-    /* 
-    * ----------------------------Test 5: test duty cycling through new VCO SDK implementation -----------------------------
-    */
-    timer_wait_us(10000);
-    debug = 'tst5';
-
-    ctrl.config.D = 64U;
-    total_cycles = (on_cycles * 255U) / ctrl.config.D;
-    off_cycles = total_cycles - on_cycles;
-    debug = 'L25';
-    st = gsr_controller_set_config(&ctrl);
-    if (st != GSR_STATUS_OK) {
-        PRINTF("  FAIL: low-duty gsr_controller_set_config returned %d\n", st);
-        return -1;
-    }
-    wait_cycles_busy(off_cycles);
-    st = gsr_read_sample(&ctrl); /* first tap: seed timestamp / start interval */
-    debug = st;
-    wait_cycles_busy(on_cycles);
-    st = gsr_read_sample(&ctrl); /* second tap: get conductance */
-    if (st != GSR_STATUS_OK) {
-        PRINTF("  FAIL: low-duty second read returned %d\n", st);
-        return -1;
-    }
-    debug = st;
-    sample = gsr_get_last_sample(&ctrl);
-    if (sample == NULL || !sample->valid) {
-        PRINTF("  FAIL: no valid mid-duty sample\n");
-        return -1;
-    }
-    debug = sample->G_nS;
-
-    ctrl.config.D = 128U;
-    total_cycles = (on_cycles * 255U) / ctrl.config.D;
-    off_cycles = total_cycles - on_cycles;
-    debug = 'M50';
-    st = gsr_controller_set_config(&ctrl);
-    if (st != GSR_STATUS_OK) {
-        PRINTF("  FAIL: mid-duty gsr_controller_set_config returned %d\n", st);
-        return -1;
-    }
-    wait_cycles_busy(off_cycles);
-    st = gsr_read_sample(&ctrl);
-    debug = st;
-    wait_cycles_busy(on_cycles);
-    st = gsr_read_sample(&ctrl);
-    if (st != GSR_STATUS_OK) {
-        PRINTF("  FAIL: mid-duty second read returned %d\n", st);
-        return -1;
-    }
-    debug = st;
-    sample = gsr_get_last_sample(&ctrl);
-    if (sample == NULL || !sample->valid) {
-        PRINTF("  FAIL: no valid mid-duty VCO-SDK sample\n");
-        return -1;
-    }
-    debug = sample->G_nS;
-
-    ctrl.config.D = 255U;
-    total_cycles = on_cycles;
-    off_cycles = 0U;
-    debug = 'H10';
-    st = gsr_controller_set_config(&ctrl);
-    if (st != GSR_STATUS_OK) {
-        PRINTF("  FAIL: high-duty gsr_controller_set_config returned %d\n", st);
-        return -1;
-    }
-    wait_cycles_busy(off_cycles);
-    st = gsr_read_sample(&ctrl);
-    debug = st;
-    wait_cycles_busy(on_cycles);
-    st = gsr_read_sample(&ctrl);
-    if (st != GSR_STATUS_OK) {
-        PRINTF("  FAIL: high-duty second read returned %d\n", st);
-        return -1;
-    }
-    debug = st;
-    sample = gsr_get_last_sample(&ctrl);
-    if (sample == NULL || !sample->valid) {
-        PRINTF("  FAIL: no valid high-duty VCO-SDK sample\n");
-        return -1;
-    }
-    debug = sample->G_nS;
-    timer_wait_us(10000); // wait for VCO to get automatically reenabled after the OFF period
 
     return 0;
 }

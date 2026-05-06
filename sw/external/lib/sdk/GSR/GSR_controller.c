@@ -7,7 +7,7 @@
 #define VCO_VARIANCE                 3U // variance in the VCO frequency-to-voltage conversion, used for sensitivity estimation
 #define F_NYQ_HZ                     2U // Nyquist frequency for the GSR measurement
 #define RESOLUTION_DB_SCALE      100U   // Return value in dB * 100
-
+#define ADEV_VAR
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
 #include "GSR_controller.h"
@@ -77,7 +77,7 @@ static uint32_t compute_frequency_error_Hz(uint32_t vin_uV, uint32_t integration
 
     // We use a fixed value for the frequency error based on the Allen deviation measurements of the VCO. 
     #ifdef ADEV_VAR
-        return 100; // approximated by 100Hz (see report and hw/vendor/analog-library/VCO/VCO_characteristics/figs/frequency_uncertainty_vs_vin.svg plot for justification)
+        return 250; // approximated by 100Hz (see report and hw/vendor/analog-library/VCO/VCO_characteristics/figs/frequency_uncertainty_vs_vin.svg plot for justification)
     #else
         return integration_rate_Hz;
     #endif
@@ -128,13 +128,12 @@ static uint32_t approx_log2_q1_u32(uint32_t x)
     return log2_q1;
 }
 
-static uint32_t compute_conductance_resolution_dB(const gsr_controller_t *ctrl)
+static uint32_t compute_conductance_resolution_dB(const gsr_controller_t *ctrl, uint32_t sensitivity_nS)
 {
-    uint32_t sensitivity_nS = ctrl->sample.conductance_sensitivity_nS;
-    uint32_t OSR = ctrl->config.current_refresh_rate_Hz / F_NYQ_HZ;
+    uint32_t OSR = ctrl->config.current_refresh_rate_Hz >> 1U; // because F_NYQ_HZ = 2Hz
     uint32_t amplitude_nS = ctrl->sample.amplitude_nS;
 
-    if (sensitivity_nS == 0U || amplitude_nS == 0U || OSR == 0U) return 404;
+    if (sensitivity_nS == 0U || amplitude_nS == 0U || OSR == 0U) return 0;
 
     uint32_t log2_A_q1 = approx_log2_q1_u32(amplitude_nS);
     uint32_t log2_OSR_q1 = approx_log2_q1_u32(OSR);
@@ -253,8 +252,6 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
         .amplitude_nS = 0U,
         .slope_nS = 0,
         .current_nA = gsr_current_from_idac_code_nA(ctrl->config.idac_code),
-        .conductance_sensitivity_nS = 0U,
-        .resolution_dB = 0U,
         .valid = false
     };
     ctrl->sample = init_sample;
@@ -281,7 +278,7 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
         ret = gsr_get_conductance_nS(&new_conductance_nS, &new_vin_uV);
     }
     if (ret != GSR_STATUS_OK) { // OUT_OF_RANGE or NOT_INITIALIZED or MISSED_UPDATE or NO_NEW_SAMPLE
-        // Need to implememt correct strategy in gcase OUT_OF_RANGE
+        // Need to implememt correct strategy in gcase OUT_OF_RANGE or NO_NEW_SAMPLE or MISSED_UPDATE
         ctrl->sample.valid = false;
         return ret;
     }
@@ -292,9 +289,7 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
     ctrl->sample.current_nA = gsr_current_from_idac_code_nA(ctrl->config.idac_code);
     // update max current limit based on the new conductance measurement
     ctrl->max_current_nA = max_current_for_conductance_nS(new_conductance_nS);
-    ctrl->sample.conductance_sensitivity_nS = compute_conductance_sensitivity_nS(new_conductance_nS, new_vin_uV, 
-                                                                            ctrl->sample.current_nA, ctrl->config.current_refresh_rate_Hz);
-    ctrl->sample.resolution_dB = compute_conductance_resolution_dB(ctrl);
+
     ctrl->sample.valid = true;
     
     if (!ctrl->initialized) {
@@ -325,6 +320,15 @@ const gsr_sample_t *gsr_get_last_sample(const gsr_controller_t *ctrl) {
 
     return &ctrl->sample;
 }
+
+gsr_metrics_t get_metrics(gsr_controller_t *ctrl) {
+    gsr_metrics_t metrics;
+    metrics.conductance_sensitivity_nS = compute_conductance_sensitivity_nS(ctrl->sample.G_nS , ctrl->sample.vin_uV, 
+                                                                            ctrl->sample.current_nA, ctrl->config.current_refresh_rate_Hz);
+    metrics.resolution_dB = compute_conductance_resolution_dB(ctrl, metrics.conductance_sensitivity_nS);
+    return metrics;
+}
+
 
 /*
 Execute one control step.
