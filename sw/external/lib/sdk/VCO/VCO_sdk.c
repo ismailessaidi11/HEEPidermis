@@ -54,7 +54,7 @@ const uint32_t _table_kvco_Hz_per_V[TABLE_SIZE] = {
 
 #define INTERPOLATE_FROM_LUT // comment if you want to read directly from LUT without interpolation (it gives less smooth results)
 
-static uint32_t g_integration_rate_Hz = 0;
+static uint32_t g_refresh_rate_Hz = 0;
 static vco_sdk_t vco_data;
 
 static uint32_t freq_to_cc(uint32_t frequency_Hz) {
@@ -82,28 +82,33 @@ static void vco_arm_toggle_after(uint32_t delay_cycles) {
 }
 
 static void vco_update_duty_windows(void) {
-    uint64_t total_cycles;
+    uint64_t integration_cycles;
 
     if (vco_data.duty_cycle_code == 255U || vco_data.duty_cycle_code == 0U) { // always ON case + avoid division by 0
+        vco_data.integration_time_CC = vco_data.refresh_time_CC;
         vco_data.off_cycles = 0U;
         return;
     }
-    total_cycles = ((uint64_t)vco_data.integration_time_CC * 255ULL) /
-                   (uint64_t)vco_data.duty_cycle_code;
-    vco_data.off_cycles = (uint32_t)(total_cycles - (uint64_t)vco_data.integration_time_CC);
+
+    integration_cycles = ((uint64_t)vco_data.refresh_time_CC *
+                          (uint64_t)vco_data.duty_cycle_code) / 255ULL;
+
+
+    vco_data.integration_time_CC = (uint32_t)integration_cycles;
+    vco_data.off_cycles = vco_data.refresh_time_CC - vco_data.integration_time_CC;
 }
 
 /*  
 This function initializes the VCO, it uses an enum to set the channel
 used as either NONE, P Channel, N channel, or Pseudo Differential mode.
 */
-vco_status_t vco_initialize(vco_channel_t channel, uint32_t integration_rate_Hz){
+vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz){
     
     //Check if valid refresh rate
-    if (integration_rate_Hz == 0) {
+    if (refresh_rate_Hz == 0) {
         return VCO_STATUS_INVALID_ARGUMENT;
     }
-
+    // clean start
     VCOp_enable(false);
     VCOn_enable(false);
     
@@ -111,20 +116,19 @@ vco_status_t vco_initialize(vco_channel_t channel, uint32_t integration_rate_Hz)
     vco_status_t status = vco_enable(channel, true); // updates vco_data.vco_enabled
     if (status != VCO_STATUS_OK) return status;
     
-    // set the VCO refresh rate
-    g_integration_rate_Hz = integration_rate_Hz;
-    uint32_t integration_time_CC = freq_to_cc(integration_rate_Hz);
+    // set the VCO timing
+    g_refresh_rate_Hz = refresh_rate_Hz;
+    vco_data.refresh_time_CC = freq_to_cc(refresh_rate_Hz);
+    vco_data.duty_cycle_code = 255U;
+    vco_update_duty_windows();
 
-    VCO_set_refresh_rate(integration_time_CC);
+    VCO_set_refresh_rate(vco_data.refresh_time_CC);
 
     //initialize the VCO data 
-    vco_data.integration_time_CC = integration_time_CC; // on cycles
     vco_data.has_prev = 0;
     vco_data.last_counter_p = 0;
     vco_data.last_counter_n = 0;
     vco_data.last_timestamp = 0;
-    vco_data.off_cycles = 0;
-    vco_data.duty_cycle_code = 255U;
     vco_data.config_changed = false;  
     vco_data.channel = channel;
 
@@ -134,20 +138,18 @@ vco_status_t vco_initialize(vco_channel_t channel, uint32_t integration_rate_Hz)
 /*
 This function sets the refresh rate of the VCO. It updates both the global variable and the hardware VCO register.
 */
-vco_status_t vco_set_refresh_rate(uint32_t integration_rate_Hz) {
-    if (integration_rate_Hz == 0) {
+vco_status_t vco_set_refresh_rate(uint32_t refresh_rate_Hz) {
+    if (refresh_rate_Hz == 0) {
         return VCO_STATUS_INVALID_ARGUMENT;
     }
 
-    uint32_t integration_time_CC = freq_to_cc(integration_rate_Hz);
-
     // update the global variables
-    g_integration_rate_Hz = integration_rate_Hz;
-    vco_data.integration_time_CC = integration_time_CC;
+    g_refresh_rate_Hz = refresh_rate_Hz;
+    vco_data.refresh_time_CC = freq_to_cc(refresh_rate_Hz);
     vco_update_duty_windows();
 
-    // update the hardware register
-    VCO_set_refresh_rate(integration_time_CC);
+    // update the hardware register with the ON-time T_int
+    VCO_set_refresh_rate(vco_data.refresh_time_CC);
     VCO_trigger();
     
     vco_data.config_changed = true; // set the configuration changed flag since changing config biases timestamp that we use in vco_get_Vin_uV.
@@ -234,7 +236,7 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
         return VCO_STATUS_INVALID_ARGUMENT;
     }
 
-    if (g_integration_rate_Hz == 0 || vco_data.channel == VCO_CHANNEL_NONE) {
+    if (g_refresh_rate_Hz == 0 || vco_data.channel == VCO_CHANNEL_NONE) {
         return VCO_STATUS_NOT_INITIALIZED;
     }
 
@@ -248,11 +250,16 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     uint64_t missed_ready_cycles =
         ((uint64_t)vco_data.integration_time_CC * 2u) + readout_delay;
 
-    // check that before the other 
-    if (vco_data.config_changed) {
+    /* If it is our first measurement, or the first one after a config change:
+        1. We reset the timestamp (take into account config change latency)
+        2. We return No_New_SAMPLE to indicate that we need a 2nd measurement for 1 sample 
+    */
+    if (vco_data.config_changed || !vco_data.has_prev) {
         vco_data.last_timestamp = now; // reset timestamp because it was biased by config change
-        elapsed_cycles = 0; // if the configuration has changed, we consider that we just got a new sample to allow the function to return the new value as soon as it's ready, and not wait for 2 refresh cycles which would be the case if we consider that we just read a sample, since the previous counter values are stale and might give wrong frequency readings until we get 2 new samples.
+        // elapsed_cycles = 0; // if the configuration has changed, we consider that we just got a new sample to allow the function to return the new value as soon as it's ready, and not wait for 2 refresh cycles which would be the case if we consider that we just read a sample, since the previous counter values are stale and might give wrong frequency readings until we get 2 new samples.
         vco_data.config_changed = false;
+        vco_data.has_prev = true;
+        return VCO_STATUS_NO_NEW_SAMPLE;
     }
 
     // Make sure the delayed refresh train has latched the decoder count.
@@ -266,18 +273,12 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
         return VCO_STATUS_MISSED_UPDATE;   // missed one or more updates
     }
 
-    if (!vco_data.has_prev) {
-        vco_data.last_timestamp += vco_data.integration_time_CC;
-        vco_data.has_prev = true;
-        return VCO_STATUS_NO_NEW_SAMPLE;   // discard the first partial interval
-    }
-
     uint32_t decoder_count = VCO_get_count();
-    uint32_t frequency_Hz = (uint32_t)(((uint64_t)decoder_count * g_integration_rate_Hz) / VCO_DECODER_PHASES);
+    uint32_t frequency_Hz = (uint32_t)(((uint64_t)decoder_count * g_refresh_rate_Hz) / VCO_DECODER_PHASES);
 
     *vin_uV  = interpolate_Vin_uV(frequency_Hz);
 
-    vco_data.last_timestamp += vco_data.integration_time_CC;
+    vco_data.last_timestamp += vco_data.refresh_time_CC;
 
     return VCO_STATUS_OK;
 }
@@ -305,6 +306,7 @@ vco_status_t vco_enable(vco_channel_t channel, bool enable)
         return VCO_STATUS_INVALID_CONFIGURATION;
     }
     vco_data.vco_enabled = enable;
+    VCO_trigger();
     return VCO_STATUS_OK;
 }
 
@@ -313,7 +315,7 @@ vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D) {
     if (channel == VCO_CHANNEL_NONE || channel != vco_data.channel) {
         return VCO_STATUS_INVALID_CONFIGURATION;
     }
-    if (D == 0U || g_integration_rate_Hz == 0U) {
+    if (D == 0U || g_refresh_rate_Hz == 0U) {
         return VCO_STATUS_INVALID_ARGUMENT;
     }
 

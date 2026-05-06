@@ -44,7 +44,8 @@ Internal state used by the VCO SDK to reconstruct frequency from
 successive counter readings.
  */
 typedef struct {
-    uint32_t        integration_time_CC; // VCO integration period in system cycles (refresh between 2 measurements)
+    uint32_t        refresh_time_CC;     // full measurement period T_s in system cycles
+    uint32_t        integration_time_CC; // VCO ON time T_int in system cycles
     uint32_t        off_cycles;          // sleep window in system cycles
     uint32_t        last_counter_p;      // previous coarse/count value
     uint32_t        last_counter_n;      // previous coarse/count value for second channel if running in differential mode
@@ -57,11 +58,11 @@ typedef struct {
     vco_channel_t   channel;             // channel configuration
 } vco_sdk_t;
 
-// Initialize the VCO path and configure its refresh rate.
-vco_status_t vco_initialize(vco_channel_t channel, uint32_t integration_rate_Hz);
+// Initialize the VCO path and configure its measurement refresh rate.
+vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz);
 
-// sets new refresh rate for the VCO
-vco_status_t vco_set_refresh_rate(uint32_t integration_rate_Hz);
+// sets new measurement refresh rate T_s for the VCO
+vco_status_t vco_set_refresh_rate(uint32_t refresh_rate_Hz);
 
 // Estimate local VCO sensitivity K_VCO = df/dV around a given Vin.
 uint32_t vco_get_kvco_Hz_per_V(uint32_t vin_uV);
