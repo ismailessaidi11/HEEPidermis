@@ -244,11 +244,11 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     uint32_t elapsed_cycles = now - vco_data.last_timestamp;
 
     uint32_t readout_delay = (vco_data.integration_time_CC > VCO_READOUT_DELAY_CC)
-                           ? VCO_READOUT_DELAY_CC
-                           : 0u;
-    uint64_t sample_ready_cycles = (uint64_t)vco_data.integration_time_CC + readout_delay;
+                        ? VCO_READOUT_DELAY_CC
+                        : 0u;
+    uint64_t sample_ready_cycles = (uint64_t)vco_data.refresh_time_CC + readout_delay;
     uint64_t missed_ready_cycles =
-        ((uint64_t)vco_data.integration_time_CC * 2u) + readout_delay;
+        ((uint64_t)vco_data.refresh_time_CC * 2u) + readout_delay;
 
     /* If it is our first measurement, or the first one after a config change:
         1. We reset the timestamp (take into account config change latency)
@@ -256,7 +256,6 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     */
     if (vco_data.config_changed || !vco_data.has_prev) {
         vco_data.last_timestamp = now; // reset timestamp because it was biased by config change
-        // elapsed_cycles = 0; // if the configuration has changed, we consider that we just got a new sample to allow the function to return the new value as soon as it's ready, and not wait for 2 refresh cycles which would be the case if we consider that we just read a sample, since the previous counter values are stale and might give wrong frequency readings until we get 2 new samples.
         vco_data.config_changed = false;
         vco_data.has_prev = true;
         return VCO_STATUS_NO_NEW_SAMPLE;
@@ -274,7 +273,8 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
     }
 
     uint32_t decoder_count = VCO_get_count();
-    uint32_t frequency_Hz = (uint32_t)(((uint64_t)decoder_count * g_refresh_rate_Hz) / VCO_DECODER_PHASES);
+    uint32_t integration_rate_Hz = (g_refresh_rate_Hz * 255U ) / vco_data.duty_cycle_code;
+    uint32_t frequency_Hz = (uint32_t)(((uint64_t)decoder_count * integration_rate_Hz) / VCO_DECODER_PHASES);
 
     *vin_uV  = interpolate_Vin_uV(frequency_Hz);
 
@@ -288,6 +288,7 @@ This function enables/disables the VCO and handles vco_data
 */
 vco_status_t vco_enable(vco_channel_t channel, bool enable)
 {
+    VCO_trigger();
     switch (channel)
     {
     case VCO_CHANNEL_NONE:
@@ -306,7 +307,6 @@ vco_status_t vco_enable(vco_channel_t channel, bool enable)
         return VCO_STATUS_INVALID_CONFIGURATION;
     }
     vco_data.vco_enabled = enable;
-    VCO_trigger();
     return VCO_STATUS_OK;
 }
 
@@ -337,6 +337,10 @@ vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D) {
 
     vco_arm_toggle_after(vco_data.off_cycles);
     return VCO_STATUS_OK;
+}
+
+bool vco_duty_cycle_is_on(void) {
+    return vco_data.vco_enabled;
 }
 
 void vco_handle_timer_irq(void) {

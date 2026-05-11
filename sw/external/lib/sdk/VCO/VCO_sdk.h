@@ -76,8 +76,8 @@ vco_status_t vco_enable(vco_channel_t channel, bool enable);
 // applies duty cycling to the VCO by setting its duty cycle D (between 0 and 255 representing D=1)
 vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D);
 
-// Indicates whether a duty-cycled ON window completed and a fresh sample may be read.
-// bool vco_sample_ready(void);
+// True while the selected VCO channel is currently enabled by the duty-cycle engine.
+bool vco_duty_cycle_is_on(void);
 
 // Advance the duty-cycle state machine from the timer IRQ handler.
 void vco_handle_timer_irq(void);
