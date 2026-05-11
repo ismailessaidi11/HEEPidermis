@@ -109,7 +109,7 @@ int main(void) {
     gsr_opctrl_status_t opst;
     uint32_t attempts;
     uint32_t reads_done;
-    uint32_t on_cycles;
+    uint32_t wait_cycles;
 
     gsr_op_request_t request_range_low = { .range = LOW, .resolution = LOW, .power = HIGH };
     gsr_op_request_t request_range_mid = { .range = MEDIUM, .resolution = LOW, .power = HIGH };
@@ -137,7 +137,7 @@ int main(void) {
         debug_mark(0xE4U, (uint32_t)opst);
         return -1;
     }
-    on_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
+    wait_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
     reads_done = 0U;
     attempts = 0U;
     while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
@@ -148,7 +148,7 @@ int main(void) {
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
                    opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
-            wait_cycles_busy(on_cycles);
+            wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xE5U, (uint32_t)opst);
             return -1;
@@ -169,7 +169,7 @@ int main(void) {
         debug_mark(0xE7U, (uint32_t)opst);
         return -1;
     }
-    on_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
+    wait_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
     reads_done = 0U;
     attempts = 0U;
     while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
@@ -180,7 +180,7 @@ int main(void) {
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
                    opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
-            wait_cycles_busy(on_cycles);
+            wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xE8U, (uint32_t)opst);
             return -1;
@@ -201,7 +201,7 @@ int main(void) {
         debug_mark(0xEAU, (uint32_t)opst);
         return -1;
     }
-    on_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
+    wait_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
     reads_done = 0U;
     attempts = 0U;
     while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
@@ -212,7 +212,7 @@ int main(void) {
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
                    opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
-            wait_cycles_busy(on_cycles);
+            wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xEBU, (uint32_t)opst);
             return -1;
@@ -233,7 +233,7 @@ int main(void) {
         debug_mark(0xEDU, (uint32_t)opst);
         return -1;
     }
-    on_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
+    wait_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
     reads_done = 0U;
     attempts = 0U;
     while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
@@ -244,7 +244,7 @@ int main(void) {
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
                    opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
-            wait_cycles_busy(on_cycles);
+            wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xEEU, (uint32_t)opst);
             return -1;
@@ -265,7 +265,7 @@ int main(void) {
         debug_mark(0xF0U, (uint32_t)opst);
         return -1;
     }
-    on_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
+    wait_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
     reads_done = 0U;
     attempts = 0U;
     while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
@@ -276,7 +276,7 @@ int main(void) {
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
                    opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
-            wait_cycles_busy(on_cycles);
+            wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xF1U, (uint32_t)opst);
             return -1;
@@ -297,29 +297,29 @@ int main(void) {
         debug_mark(0xF3U, (uint32_t)opst);
         return -1;
     }
-    uint32_t total_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
-    on_cycles = (total_cycles * k_power_profiles[(uint32_t)request_power_low.power].D) / 255U;
-    uint32_t off_cycles = total_cycles - on_cycles;
-    uint32_t first_tap = off_cycles - on_cycles / 4U;
-    uint32_t second_tap = on_cycles;
     reads_done = 0U;
-    while (reads_done < N_READ_STEPS) {
-        wait_cycles_busy(first_tap);
+    attempts = 0U;
+    while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
         opst = gsr_opctrl_read_sample(&opctrl, &sample);
         debug_mark(0x30U, (uint32_t)opst);
-        wait_cycles_busy(second_tap);
-        opst = gsr_opctrl_read_sample(&opctrl, &sample);
-        debug_mark(0x30U, (uint32_t)opst);
-        if (opst != GSR_OPCTRL_OK) {
+
+        if (opst == GSR_OPCTRL_OK) {
+            debug_mark(0x40U, sample.G_nS);
+            if (!sample.valid) {
+                debug_mark(0xF5U, 0U);
+                return -1;
+            }
+            reads_done++;
+        } else if (opst != GSR_OPCTRL_MEASUREMENT_ERROR &&
+                   opst != GSR_OPCTRL_NOT_INITIALIZED) {
             debug_mark(0xF4U, (uint32_t)opst);
             return -1;
         }
-        debug_mark(0x40U, sample.G_nS);
-        if (!sample.valid) {
-            debug_mark(0xF5U, 0U);
-            return -1;
-        }
-        reads_done++;
+        attempts++;
+    }
+    if (reads_done != N_READ_STEPS) {
+        debug_mark(0xF5U, reads_done);
+        return -1;
     }
 
     /* Request 7: medium power */
@@ -331,29 +331,29 @@ int main(void) {
         debug_mark(0xF6U, (uint32_t)opst);
         return -1;
     }
-    total_cycles = refresh_wait_cycles(controller.config.current_refresh_rate_Hz);
-    on_cycles = (total_cycles * k_power_profiles[(uint32_t)request_power_mid.power].D) / 255U;
-    off_cycles = total_cycles - on_cycles;
-    first_tap = off_cycles - on_cycles / 4U;
-    second_tap = on_cycles;
     reads_done = 0U;
-    while (reads_done < N_READ_STEPS) {
-        wait_cycles_busy(first_tap);
+    attempts = 0U;
+    while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
         opst = gsr_opctrl_read_sample(&opctrl, &sample);
         debug_mark(0x30U, (uint32_t)opst);
-        wait_cycles_busy(second_tap);
-        opst = gsr_opctrl_read_sample(&opctrl, &sample);
-        debug_mark(0x30U, (uint32_t)opst);
-        if (opst != GSR_OPCTRL_OK) {
+
+        if (opst == GSR_OPCTRL_OK) {
+            debug_mark(0x40U, sample.G_nS);
+            if (!sample.valid) {
+                debug_mark(0xF8U, 0U);
+                return -1;
+            }
+            reads_done++;
+        } else if (opst != GSR_OPCTRL_MEASUREMENT_ERROR &&
+                   opst != GSR_OPCTRL_NOT_INITIALIZED) {
             debug_mark(0xF7U, (uint32_t)opst);
             return -1;
         }
-        debug_mark(0x40U, sample.G_nS);
-        if (!sample.valid) {
-            debug_mark(0xF8U, 0U);
-            return -1;
-        }
-        reads_done++;
+        attempts++;
+    }
+    if (reads_done != N_READ_STEPS) {
+        debug_mark(0xF8U, reads_done);
+        return -1;
     }
     return 0;
 }

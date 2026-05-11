@@ -61,7 +61,8 @@ static gsr_status_t controller_set_vco(gsr_controller_t *ctrl, gsr_ctrl_mode_t m
     ctrl->config.current_refresh_rate_Hz = new_rate_Hz; // keep track of the current refresh rate in the controller state for reference
     ret = gsr_status_from_vco(vco_set_refresh_rate(new_rate_Hz));
     if (ret != GSR_STATUS_OK) return ret;
-    return gsr_status_from_vco(vco_duty_cycle(ctrl->config.channel, D));
+    ret = gsr_status_from_vco(vco_duty_cycle(ctrl->config.channel, D));
+    return ret;
 }
 
 static uint32_t max_current_for_conductance_nS(uint32_t conductance_nS) {
@@ -265,7 +266,8 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
     return gsr_init(ctrl->config.channel, ctrl->config.baseline_refresh_rate_Hz, ctrl->config.idac_code);
 
 }
-gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
+
+static gsr_status_t gsr_read_sample_now(gsr_controller_t *ctrl) {
     uint32_t new_vin_uV = 0U;
     uint32_t new_conductance_nS = 0U;
     gsr_status_t ret;
@@ -313,6 +315,23 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl) {
     ctrl->sample.amplitude_nS = compute_amplitude_nS(ctrl);
 
     return ret;
+}
+
+gsr_status_t gsr_read_sample(gsr_controller_t *ctrl)
+{
+    if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
+
+    if (ctrl->config.D == 255U) { // no duty cycling 
+        return gsr_read_sample_now(ctrl);
+    }
+
+    while (1) {
+        asm volatile("wfi");
+
+        if (!vco_duty_cycle_is_on()) {
+            return gsr_read_sample_now(ctrl);
+        }
+    }
 }
 
 const gsr_sample_t *gsr_get_last_sample(const gsr_controller_t *ctrl) {

@@ -83,7 +83,7 @@ gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl);
 // Update the controller configuration and apply it to the hardware.
 gsr_status_t gsr_controller_set_config(gsr_controller_t *ctrl);
 
-/* Read one sample (if ctrl->config.M>=1) and store it in the controller. Or (if ctrl->config.M>1) Average multiple valid samples. NO_NEW_SAMPLE is ignored while waiting. */
+/* Read one sample and store it in the controller. Duty-cycled reads sleep until the VCO ON window has completed. */
 gsr_status_t gsr_read_sample(gsr_controller_t *ctrl);
 
 /* Return the last valid/attempted sample stored in the context. */

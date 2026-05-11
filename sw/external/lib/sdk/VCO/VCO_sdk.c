@@ -8,17 +8,6 @@
 
 #include "VCO_sdk.h"
 
-#define PRINTF_IN_SIM  1
-#define PRINTF_IN_FPGA 0
-#define TARGET_SIM     1
-#if TARGET_SIM && PRINTF_IN_SIM
-    #define PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
-#elif PRINTF_IN_FPGA && !TARGET_SIM
-    #define PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
-#else
-    #define PRINTF(...)
-#endif
-
 #define TABLE_SIZE 25
 #define VCO_GAIN 1
 #define VCO_ACCEL_RATIO 100 // The ratio by which the VCO is accelerated in simulation to allow faster testing. The refresh rate and integration rate are divided by this factor in simulation mode.
@@ -54,8 +43,28 @@ const uint32_t _table_kvco_Hz_per_V[TABLE_SIZE] = {
 
 #define INTERPOLATE_FROM_LUT // comment if you want to read directly from LUT without interpolation (it gives less smooth results)
 
+#define VCO_FLAG_HAS_PREV        (1U << 0)
+#define VCO_FLAG_CONFIG_CHANGED  (1U << 1)
+#define VCO_FLAG_ENABLED         (1U << 2)
+
 static uint32_t g_refresh_rate_Hz = 0;
 static vco_sdk_t vco_data;
+
+static bool vco_flag_is_set(uint8_t flag) {
+    return (vco_data.flags & flag) != 0U;
+}
+
+static void vco_flag_set(uint8_t flag) {
+    vco_data.flags |= flag;
+}
+
+static void vco_flag_clear(uint8_t flag) {
+    vco_data.flags &= (uint8_t)~flag;
+}
+
+static uint32_t vco_get_refresh_cycles(void) {
+    return vco_data.on_cycles + vco_data.off_cycles;
+}
 
 static uint32_t freq_to_cc(uint32_t frequency_Hz) {
 #if TARGET_SIM
@@ -82,20 +91,23 @@ static void vco_arm_toggle_after(uint32_t delay_cycles) {
 }
 
 static void vco_update_duty_windows(void) {
-    uint64_t integration_cycles;
+    uint32_t refresh_cycles = freq_to_cc(g_refresh_rate_Hz);
 
-    if (vco_data.duty_cycle_code == 255U || vco_data.duty_cycle_code == 0U) { // always ON case + avoid division by 0
-        vco_data.integration_time_CC = vco_data.refresh_time_CC;
+    if (vco_data.duty_cycle_code == 255U) {
+        vco_data.on_cycles = refresh_cycles;
         vco_data.off_cycles = 0U;
+        vco_data.integration_rate_Hz = g_refresh_rate_Hz;
         return;
     }
 
-    integration_cycles = ((uint64_t)vco_data.refresh_time_CC *
-                          (uint64_t)vco_data.duty_cycle_code) / 255ULL;
+    vco_data.on_cycles =
+        (uint32_t)(((uint64_t)refresh_cycles * vco_data.duty_cycle_code) / 255ULL);
 
+    vco_data.off_cycles =
+        refresh_cycles - vco_data.on_cycles;
 
-    vco_data.integration_time_CC = (uint32_t)integration_cycles;
-    vco_data.off_cycles = vco_data.refresh_time_CC - vco_data.integration_time_CC;
+    vco_data.integration_rate_Hz =
+        (g_refresh_rate_Hz * 255U) / vco_data.duty_cycle_code;
 }
 
 /*  
@@ -118,19 +130,15 @@ vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz){
     
     // set the VCO timing
     g_refresh_rate_Hz = refresh_rate_Hz;
-    vco_data.refresh_time_CC = freq_to_cc(refresh_rate_Hz);
     vco_data.duty_cycle_code = 255U;
     vco_update_duty_windows();
 
-    VCO_set_refresh_rate(vco_data.refresh_time_CC);
+    VCO_set_refresh_rate(vco_get_refresh_cycles());
 
     //initialize the VCO data 
-    vco_data.has_prev = 0;
-    vco_data.last_counter_p = 0;
-    vco_data.last_counter_n = 0;
     vco_data.last_timestamp = 0;
-    vco_data.config_changed = false;  
-    vco_data.channel = channel;
+    vco_data.flags &= (uint8_t)~(VCO_FLAG_HAS_PREV | VCO_FLAG_CONFIG_CHANGED);
+    vco_data.channel = (uint8_t)channel;
 
     return VCO_STATUS_OK;
 }
@@ -145,14 +153,13 @@ vco_status_t vco_set_refresh_rate(uint32_t refresh_rate_Hz) {
 
     // update the global variables
     g_refresh_rate_Hz = refresh_rate_Hz;
-    vco_data.refresh_time_CC = freq_to_cc(refresh_rate_Hz);
     vco_update_duty_windows();
 
-    // update the hardware register with the ON-time T_int
-    VCO_set_refresh_rate(vco_data.refresh_time_CC);
+    // update the hardware register with the full refresh period
+    VCO_set_refresh_rate(vco_get_refresh_cycles());
     VCO_trigger();
     
-    vco_data.config_changed = true; // set the configuration changed flag since changing config biases timestamp that we use in vco_get_Vin_uV.
+    vco_flag_set(VCO_FLAG_CONFIG_CHANGED); // set the configuration changed flag since changing config biases timestamp that we use in vco_get_Vin_uV.
     return VCO_STATUS_OK;
 }
 
@@ -242,22 +249,24 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
 
     uint32_t now = timer_get_cycles();
     uint32_t elapsed_cycles = now - vco_data.last_timestamp;
+    uint32_t refresh_cycles = vco_get_refresh_cycles();
 
-    uint32_t readout_delay = (vco_data.integration_time_CC > VCO_READOUT_DELAY_CC)
+    uint32_t readout_delay = (vco_data.on_cycles > VCO_READOUT_DELAY_CC)
                         ? VCO_READOUT_DELAY_CC
                         : 0u;
-    uint64_t sample_ready_cycles = (uint64_t)vco_data.refresh_time_CC + readout_delay;
+    uint64_t sample_ready_cycles = (uint64_t)refresh_cycles + readout_delay;
     uint64_t missed_ready_cycles =
-        ((uint64_t)vco_data.refresh_time_CC * 2u) + readout_delay;
+        ((uint64_t)refresh_cycles * 2u) + readout_delay;
 
     /* If it is our first measurement, or the first one after a config change:
         1. We reset the timestamp (take into account config change latency)
         2. We return No_New_SAMPLE to indicate that we need a 2nd measurement for 1 sample 
     */
-    if (vco_data.config_changed || !vco_data.has_prev) {
+    bool discard_next = vco_flag_is_set(VCO_FLAG_CONFIG_CHANGED) || !vco_flag_is_set(VCO_FLAG_HAS_PREV); // either config just changed or it is the first read
+    if (discard_next) {
         vco_data.last_timestamp = now; // reset timestamp because it was biased by config change
-        vco_data.config_changed = false;
-        vco_data.has_prev = true;
+        vco_flag_clear(VCO_FLAG_CONFIG_CHANGED);
+        vco_flag_set(VCO_FLAG_HAS_PREV);
         return VCO_STATUS_NO_NEW_SAMPLE;
     }
 
@@ -268,17 +277,16 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
 
     if ((uint64_t)elapsed_cycles >= missed_ready_cycles) {
         vco_data.last_timestamp = now;
-        vco_data.has_prev = true;
+        vco_flag_set(VCO_FLAG_HAS_PREV);
         return VCO_STATUS_MISSED_UPDATE;   // missed one or more updates
     }
 
     uint32_t decoder_count = VCO_get_count();
-    uint32_t integration_rate_Hz = (g_refresh_rate_Hz * 255U ) / vco_data.duty_cycle_code;
-    uint32_t frequency_Hz = (uint32_t)(((uint64_t)decoder_count * integration_rate_Hz) / VCO_DECODER_PHASES);
+    uint32_t frequency_Hz = (uint32_t)(((uint64_t)decoder_count * vco_data.integration_rate_Hz) / VCO_DECODER_PHASES);
 
     *vin_uV  = interpolate_Vin_uV(frequency_Hz);
 
-    vco_data.last_timestamp += vco_data.refresh_time_CC;
+    vco_data.last_timestamp += refresh_cycles;
 
     return VCO_STATUS_OK;
 }
@@ -306,13 +314,17 @@ vco_status_t vco_enable(vco_channel_t channel, bool enable)
     default:
         return VCO_STATUS_INVALID_CONFIGURATION;
     }
-    vco_data.vco_enabled = enable;
+    if (enable) {
+        vco_flag_set(VCO_FLAG_ENABLED);
+    } else {
+        vco_flag_clear(VCO_FLAG_ENABLED);
+    }
     return VCO_STATUS_OK;
 }
 
 // applies duty cycling to the VCO by setting its duty cycle D (between 0 and 255 representing D=1)
 vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D) {
-    if (channel == VCO_CHANNEL_NONE || channel != vco_data.channel) {
+    if (channel == VCO_CHANNEL_NONE || channel != (vco_channel_t)vco_data.channel) {
         return VCO_STATUS_INVALID_CONFIGURATION;
     }
     if (D == 0U || g_refresh_rate_Hz == 0U) {
@@ -321,7 +333,7 @@ vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D) {
 
     vco_data.duty_cycle_code = D;
     vco_update_duty_windows();
-    vco_data.config_changed = true; // set the configuration changed flag since we are disabling the VCO, this will make sure that when we enable it again, we don't use old timestamps that keep track of readings which get biased here. 
+    vco_flag_set(VCO_FLAG_CONFIG_CHANGED); // set the configuration changed flag since we are disabling the VCO, this will make sure that when we enable it again, we don't use old timestamps that keep track of readings which get biased here. 
 
 
     if (vco_data.duty_cycle_code == 255U) { // if D=255, keep VCO ON (no duty cycling)
@@ -330,7 +342,7 @@ vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D) {
         return vco_enable(channel, true);
     }
 
-    if (vco_data.vco_enabled) {
+    if (vco_flag_is_set(VCO_FLAG_ENABLED)) {
         vco_status_t status = vco_enable(channel, false);
         if (status != VCO_STATUS_OK) return status;
     }
@@ -340,7 +352,7 @@ vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D) {
 }
 
 bool vco_duty_cycle_is_on(void) {
-    return vco_data.vco_enabled;
+    return vco_flag_is_set(VCO_FLAG_ENABLED);
 }
 
 void vco_handle_timer_irq(void) {
@@ -353,11 +365,11 @@ void vco_handle_timer_irq(void) {
     timer_irq_clear();
     timer_irq_disable_local();
 
-    if (vco_data.vco_enabled) {
-        (void)vco_enable(vco_data.channel, false);
+    if (vco_flag_is_set(VCO_FLAG_ENABLED)) {
+        (void)vco_enable((vco_channel_t)vco_data.channel, false);
         vco_arm_toggle_after(vco_data.off_cycles);
     } else {
-        (void)vco_enable(vco_data.channel, true);
-        vco_arm_toggle_after(vco_data.integration_time_CC);
+        (void)vco_enable((vco_channel_t)vco_data.channel, true);
+        vco_arm_toggle_after(vco_data.on_cycles);
     }
 }

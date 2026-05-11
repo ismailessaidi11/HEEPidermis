@@ -293,20 +293,19 @@ static int test_all()
         return -1;
     }
     debug = 'L25';
-    uint32_t total_cycles = refresh_wait_cycles(ctrl.config.current_refresh_rate_Hz);
-    uint32_t on_cycles = (total_cycles * ctrl.config.D) / 255U;;
-    uint32_t off_cycles = total_cycles - on_cycles;
-    uint32_t first_tap = off_cycles - on_cycles/4;
-    uint32_t second_tap = on_cycles;
     steps_done = 0;
+    uint32_t attempts = 0U;
     while (steps_done<N_READ_STEPS) {
-        wait_cycles_busy(first_tap);
+        if (attempts++ >= SAMPLE_ATTEMPT_LIMIT) {
+            debug = (0xF6 << 24) | st;
+            return -1;
+        }
         st = gsr_read_sample(&ctrl);
         debug = st;
-        debug = ctrl.sample.G_nS;
-        wait_cycles_busy(second_tap);
-        st = gsr_read_sample(&ctrl);
         if (st != GSR_STATUS_OK) {
+            if (st == GSR_STATUS_NO_NEW_SAMPLE || st == GSR_STATUS_MISSED_UPDATE) {
+                continue;
+            }
             debug = (0xF6 << 24) | st;
             return -1;
         }
@@ -315,17 +314,12 @@ static int test_all()
             debug = (0xF7 << 24);
             return -1;
         }
-        debug = st;
         debug = sample->G_nS;
         steps_done++;
     }
 
     /* MID power: D = 128 */
     ctrl.config.D = 128U;
-    on_cycles = (total_cycles * ctrl.config.D) / 255U;
-    off_cycles = total_cycles - on_cycles;
-    first_tap = off_cycles - on_cycles/4;
-    second_tap = on_cycles;
     debug = 'M50';
     st = gsr_controller_set_config(&ctrl);
     if (st != GSR_STATUS_OK) {
@@ -333,14 +327,18 @@ static int test_all()
         return -1;
     }
     steps_done = 0;
+    attempts = 0U;
     while (steps_done<N_READ_STEPS) {
-        wait_cycles_busy(first_tap);
+        if (attempts++ >= SAMPLE_ATTEMPT_LIMIT) {
+            debug = (0xF9 << 24) | st;
+            return -1;
+        }
         st = gsr_read_sample(&ctrl);
         debug = st;
-        debug = ctrl.sample.G_nS;
-        wait_cycles_busy(second_tap);
-        st = gsr_read_sample(&ctrl);
         if (st != GSR_STATUS_OK) {
+            if (st == GSR_STATUS_NO_NEW_SAMPLE || st == GSR_STATUS_MISSED_UPDATE) {
+                continue;
+            }
             debug = (0xF9 << 24) | st;
             return -1;
         }
@@ -349,14 +347,11 @@ static int test_all()
             debug = (0xFA << 24);
             return -1;
         }
-        debug = st;
         debug = ctrl.sample.G_nS;
         steps_done++;
     }
     /* HIGH power: D = 255 */
     ctrl.config.D = 255U;
-    on_cycles = total_cycles;
-    off_cycles = 0U;
     debug = 'H10';
     st = gsr_controller_set_config(&ctrl);
     if (st != GSR_STATUS_OK) {
@@ -365,12 +360,7 @@ static int test_all()
     }
     steps_done = 0;
     while (steps_done<N_READ_STEPS) {
-        st = gsr_read_sample(&ctrl);
-        debug = st;
-        debug = ctrl.sample.G_nS;
-        wait_cycles_busy(total_cycles);
-        st = gsr_read_sample(&ctrl);
-        if (st != GSR_STATUS_OK) {
+        if (wait_for_read_sample_status(&ctrl, &st) != 0) {
             debug = (0xFC << 24) | st;
             return -1;
         }
