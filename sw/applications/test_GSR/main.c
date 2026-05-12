@@ -43,6 +43,8 @@
 
 uint32_t window[MOVING_AVG_WINDOW];
 
+volatile uint32_t debug __attribute__((section(".xheep_debug_mem")));
+
 #define TABLE_SIZE 25
 uint32_t table_Vin_uV[TABLE_SIZE] ={340000, 360000, 380000, 400000, 420000, 440000, 460000, 480000, 500000, 520000, 540000, 560000, 580000, 600000, 620000, 640000, 660000, 680000, 700000, 720000, 740000, 760000, 780000, 800000, 820000};
 uint32_t table_fosc_Hz[TABLE_SIZE] = {26130, 31330, 37320, 45270, 55150, 67270, 82680, 99870, 121190, 146020, 175270, 208990, 247770, 291780, 341260, 396650, 457900, 525140, 598560, 677660, 762750, 853760, 950200, 1051710, 1158000};
@@ -98,6 +100,8 @@ uint32_t interpolate_Vin_uV(uint32_t f_target) {
     #if VCO_SUPPLY_FROM_LDO
         result_uV += VCO_CAL_FROM_LDO_ADD_uV;
     #endif
+
+    return result_uV;
 }
 
 uint32_t update_dac1(val){
@@ -160,7 +164,7 @@ int main() {
 
 
             PRINTF("\n%d: %d Hz\t| %d uV | %d kΩ", i, freq_Hz, vin_uV, res_kO);
-
+            debug = res_kO;
             i++;
         }else{
             PRINTF("\nSkipped");

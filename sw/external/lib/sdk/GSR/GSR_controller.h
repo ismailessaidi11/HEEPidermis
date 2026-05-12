@@ -4,7 +4,7 @@
 // File: GSR_sdk.h
 // Author: Omar Shibli & Ismail Essaidi
 // Date: 08/04/2026
-/* Description: 
+/* Description:
  * The GSR SDK owns measurement state and applies configs to the GSR front-end:
  * - reads Vin from the VCO SDK
  * - computes conductance, sensitivity (deltaG), and power
@@ -42,7 +42,7 @@ typedef struct {
     uint32_t baseline_nS;
     int32_t slope_nS;
     uint32_t amplitude_nS;        /* Absolute change in conductance compared to the baseline. */
-    
+
     uint32_t current_nA;         /* Injected current used for this sample's conductance computation. */
     /*
      * True only after a successful VCO read and conductance conversion.
@@ -72,7 +72,6 @@ typedef struct {
 
     bool initialized;
 } gsr_controller_t;
-
 
 // Initialize the controller state and underlying GSR front-end.
 gsr_status_t gsr_controller_init(gsr_controller_t *ctrl);

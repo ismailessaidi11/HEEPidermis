@@ -23,7 +23,7 @@ gsr_status_t gsr_status_from_vco(vco_status_t status) {
 }
 
 gsr_status_t gsr_init(vco_channel_t channel, uint32_t refresh_rate_Hz, uint8_t idac_val){
-    
+
     current_nA = gsr_current_from_idac_code_nA(idac_val);
     iDACs_set_currents(idac_val, 0);
     vco_status_t st = vco_initialize(channel, refresh_rate_Hz);
@@ -80,7 +80,7 @@ Only valid samples are accumulated; NO_NEW_SAMPLE results are ignored.
 
 */
 gsr_status_t gsr_get_conductance_oversampled(uint32_t *conductance_nS, uint32_t *vin_uV_ret, int M) {
-    
+
     if (conductance_nS == 0 ||vin_uV_ret == 0 || M <= 0) {
         return GSR_STATUS_INVALID_ARGUMENT;
     }
