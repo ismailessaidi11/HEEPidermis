@@ -24,6 +24,7 @@
 #include "REFs_ctrl.h"
 #include "iDAC_ctrl.h"
 #include "GSR_sdk.h"
+#include "DLC_sdk.h"
 
 
 #define PRINTF_IN_SIM  1

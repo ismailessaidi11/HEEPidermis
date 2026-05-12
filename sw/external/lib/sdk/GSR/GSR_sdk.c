@@ -6,6 +6,32 @@
 
 static uint32_t current_nA = 0;
 
+static bool      dlc_used       = false;
+static uint8_t  *s_dlc_buf      = 0;
+static uint16_t  s_dlc_buf_size = 0;
+static uint16_t  s_dlc_read_idx = 0;
+
+/*
+Initialize the GSR measurement chain.
+
+The selected iDAC code sets the injected current, and the VCO SDK is then
+initialized with the requested channel and refresh rate.
+*/
+gsr_status_t gsr_init_dlc(vco_channel_t channel, uint32_t refresh_rate_Hz, uint8_t idac_val, const gsr_dlc_config_t *dlc_cfg){
+
+    dlc_used = true;
+    current_nA = 40*idac_val;
+    iDACs_set_currents(idac_val, 0);
+    s_dlc_buf      = dlc_cfg->results_buf;
+    s_dlc_buf_size = dlc_cfg->buf_size;
+    s_dlc_read_idx = 0;
+    vco_status_t st = vco_dlc_initialize(channel, refresh_rate_Hz, dlc_cfg->dlc_cfg, dlc_cfg->results_buf, dlc_cfg->buf_size, dlc_cfg->input_samples);
+    if (st == VCO_STATUS_OK) return GSR_STATUS_OK;
+    if (st == VCO_STATUS_INVALID_ARGUMENT) return GSR_STATUS_INVALID_ARGUMENT;
+    return GSR_STATUS_NOT_INITIALIZED;
+
+}
+
 /*
 Initialize the GSR measurement chain.
 

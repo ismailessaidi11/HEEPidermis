@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "VCO_sdk.h"
+#include "DLC_sdk.h"
 
 /*
 This layer builds on top of the VCO SDK and converts reconstructed Vin
@@ -20,11 +21,23 @@ typedef enum {
     GSR_STATUS_OUT_OF_RANGE
 } gsr_status_t;
 
+
+typedef struct {
+    const dlc_config_t *dlc_cfg;
+    uint8_t            *results_buf;
+    uint16_t            buf_size;
+    uint32_t            input_samples;
+} gsr_dlc_config_t;
+
+
 // status translation from the VCO layer to the GSR SDK status codes
 gsr_status_t gsr_status_from_vco(vco_status_t status);
 
 //Initialize the GSR front-end with the selected VCO channel, sampling rate, and current.
 gsr_status_t gsr_init(vco_channel_t channel, uint32_t refresh_rate_Hz, uint8_t idac_val);
+
+//Initialize the GSR front-end with the selected VCO channel, sampling rate, current, and dLC config.
+gsr_status_t gsr_init_dlc(vco_channel_t channel, uint32_t refresh_rate_Hz, uint8_t idac_val, const gsr_dlc_config_t *dlc_cfg);
 
 /* Convert an iDAC code to injected current using the present front-end model. */
 uint32_t gsr_current_from_idac_code_nA(uint8_t idac_code);
