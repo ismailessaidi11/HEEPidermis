@@ -75,8 +75,9 @@ void dma_intr_handler_window_done(uint8_t channel) {
 uint8_t dma_window_ratio_warning_threshold(void) { return 0; }
 
 void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
-    timer_arm_stop();
+    // timer_arm_stop();
     timer_irq_clear();
+    // timer_start();
 }
 
 // Hardware init

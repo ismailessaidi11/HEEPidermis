@@ -29,7 +29,8 @@ vco_status_t vco_dlc_initialize(
     if (dlc_st != DLC_STATUS_OK) return VCO_STATUS_NOT_INITIALIZED;
 
     // We add a wait for the VCO to settle before setting initial level
-    timer_wait_us(100);
+    // timer_wait_us(100);
+    // This timer was removed as it would stall and not allow the rest of the app go ahead. @Omar
 
     int32_t initial_count = (int32_t)VCO_get_count();
 
