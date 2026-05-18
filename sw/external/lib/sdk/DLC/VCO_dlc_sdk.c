@@ -1,6 +1,7 @@
 #include "VCO_dlc_sdk.h"
 #include "VCO_decoder.h"
 #include "timer_sdk.h"
+#include "VCO_sdk.h"
 
 #define VCO_DECODER_PHASES 62u
 
@@ -74,6 +75,6 @@ vco_status_t vco_dlc_process_event(uint8_t packed_event, uint32_t *vin_uV) {
     uint32_t freq_Hz =
         (uint32_t)((phase_counts_per_sample * s_state.refresh_rate_Hz) / VCO_DECODER_PHASES);
 
-    *vin_uV = __interpolate_Vin_uV(freq_Hz);
+    *vin_uV = interpolate_Vin_uV(freq_Hz);
     return VCO_STATUS_OK;
 }

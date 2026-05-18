@@ -83,8 +83,16 @@ gsr_status_t gsr_get_conductance_nS(uint32_t *conductance_nS, uint32_t* vin_uV_r
 
     // Get the latest reconstructed front-end voltage from the VCO layer.
     uint32_t vin_uV = 0;
-    gsr_status_t st = gsr_status_from_vco(vco_get_Vin_uV(&vin_uV));
-    if (st != GSR_STATUS_OK) return st;
+
+    if (dlc_used) {
+        uint8_t packed_event = s_dlc_buf[s_dlc_read_idx];
+        s_dlc_read_idx = (s_dlc_read_idx + 1) % s_dlc_buf_size;
+        vco_status_t st = vco_dlc_process_event(packed_event, &vin_uV);
+        if (st != VCO_STATUS_OK) return st;
+    } else {
+        gsr_status_t st = gsr_status_from_vco(vco_get_Vin_uV(&vin_uV));
+        if (st != GSR_STATUS_OK) return st;
+    }
 
     // Optionally expose Vin to the caller for monitoring or controller use.
     if (vin_uV_ret != 0){

@@ -71,6 +71,9 @@ vco_status_t vco_enable(vco_channel_t channel, bool enable);
 // applies duty cycling to the VCO by setting its duty cycle D (between 0 and 255 representing D=1)
 vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D);
 
+// Interpolate Vin from a VCO oscillation frequency using the calibration table.
+uint32_t interpolate_Vin_uV(uint32_t f_target);
+
 // True while the selected VCO channel is currently enabled by the duty-cycle engine.
 bool vco_duty_cycle_is_on(void);
 
