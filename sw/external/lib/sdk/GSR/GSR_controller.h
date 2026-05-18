@@ -25,7 +25,7 @@
 /* Hardware configuration required by the measurement layer. */
 typedef struct {
     vco_channel_t channel;       /* VCO path used to reconstruct Vin. */
-    uint8_t D;                 /* is the VCO duty cycle (between 0 and 255 representing D=1) */
+    uint8_t  duty_cycle_code;                 /* is the VCO duty cycle inverse (1/D) (2 is 50% Duty Cycle, 4 is 25% Duty Cycle, 1 is 100% Duty cycle)) */
     uint32_t baseline_refresh_rate_Hz;
     uint32_t phasic_refresh_rate_Hz;
     uint32_t recovery_refresh_rate_Hz;

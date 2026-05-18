@@ -284,8 +284,8 @@ static int test_all()
     ctrl.mode = GSR_CTRL_MODE_BASELINE;
     ctrl.config.idac_code = 20; // get back to current further from the limit
     
-    /* LOW power: D = 64 */
-    ctrl.config.D = 64U;
+    /* LOW power: D = 25% */
+    ctrl.config.duty_cycle_code = 4U;
 
     st = gsr_controller_set_config(&ctrl);
     if (st != GSR_STATUS_OK) {
@@ -318,8 +318,8 @@ static int test_all()
         steps_done++;
     }
 
-    /* MID power: D = 128 */
-    ctrl.config.D = 128U;
+    /* MID power: D = 50% */
+    ctrl.config.duty_cycle_code = 2U;
     debug = 'M50';
     st = gsr_controller_set_config(&ctrl);
     if (st != GSR_STATUS_OK) {
@@ -350,8 +350,8 @@ static int test_all()
         debug = ctrl.sample.G_nS;
         steps_done++;
     }
-    /* HIGH power: D = 255 */
-    ctrl.config.D = 255U;
+    /* HIGH power: D = 100% */
+    ctrl.config.duty_cycle_code = 1U;
     debug = 'H10';
     st = gsr_controller_set_config(&ctrl);
     if (st != GSR_STATUS_OK) {

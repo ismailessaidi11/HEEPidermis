@@ -21,7 +21,7 @@ const gsr_refresh_profile_t k_refresh_profiles[GSR_OPCTRL_PROFILE_COUNT] = {
 };
 
 const gsr_power_profile_t k_power_profiles[GSR_OPCTRL_PROFILE_COUNT] = {
-    { .D = 64U }, // The VCO is ON 1/4 of the time
-    { .D = 128U }, // The VCO is ON 1/2 of the time
-    { .D = 255U }, // The VCO is always ON 
+    { .duty_cycle_code = 4U }, // The VCO is ON 1/4 of the time
+    { .duty_cycle_code = 2U }, // The VCO is ON 1/2 of the time
+    { .duty_cycle_code = 1U }, // The VCO is always ON 
 };

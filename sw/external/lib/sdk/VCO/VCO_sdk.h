@@ -48,7 +48,7 @@ typedef struct {
     uint32_t off_cycles;               // sleep window in system cycles
     uint32_t last_timestamp;           // timer_get_cycles() at previous read
     uint32_t integration_rate_Hz;       // inverse of T_int, precomputed to avoid division in the read path
-    uint8_t duty_cycle_code;           // D in [1,255]
+    uint8_t duty_cycle_code;           // duty_cycle_code = 1/D is actually the inverse duty cycle (2 is 50% Duty Cycle, 4 is 25% Duty Cycle, 1 is 100% Duty cycle)
     uint8_t channel;                   // channel configuration
     uint8_t flags;                     // packed internal state bits
 } vco_sdk_t;
@@ -56,8 +56,8 @@ typedef struct {
 // Initialize the VCO path and configure its measurement refresh rate.
 vco_status_t vco_initialize(vco_channel_t channel, uint32_t refresh_rate_Hz);
 
-// sets new measurement refresh rate T_s for the VCO
-vco_status_t vco_set_refresh_rate(uint32_t refresh_rate_Hz);
+// sets new measurement refresh rate T_s for the VCO + applies duty cycling to the VCO by setting its duty cycle inverse 1/D
+vco_status_t vco_config(vco_channel_t channel, uint32_t refresh_rate_Hz, uint8_t duty_cycle_code);
 
 // Estimate local VCO sensitivity K_VCO = df/dV around a given Vin.
 uint32_t vco_get_kvco_Hz_per_V(uint32_t vin_uV);
@@ -75,7 +75,7 @@ vco_status_t vco_duty_cycle(vco_channel_t channel, uint8_t D);
 uint32_t interpolate_Vin_uV(uint32_t f_target);
 
 // True while the selected VCO channel is currently enabled by the duty-cycle engine.
-bool vco_duty_cycle_is_on(void);
+bool vco_is_on(void);
 
 // Advance the duty-cycle state machine from the timer IRQ handler.
 void vco_handle_timer_irq(void);

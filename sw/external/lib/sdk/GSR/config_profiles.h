@@ -27,7 +27,7 @@ typedef struct {
 } gsr_refresh_profile_t;
 
 typedef struct {
-    uint8_t D;
+    uint8_t duty_cycle_code;
 } gsr_power_profile_t;
 
 extern const gsr_range_profile_t k_range_profiles[GSR_OPCTRL_PROFILE_COUNT];

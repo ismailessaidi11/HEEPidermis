@@ -208,6 +208,9 @@ TOP.tb_system.u_cheep_top.u_analog_subsystem.u_VCOp.f_osc_Hz
 @24
 [color] 3
 TOP.tb_system.u_cheep_top.u_cheep_peripherals.u_vco_decoder.p_coarse_i[25:0]
+@29
+TOP.tb_system.u_cheep_top.u_analog_subsystem.u_VCOp.EN
+TOP.tb_system.u_cheep_top.u_analog_subsystem.u_VCOp.REFRESH
 @8420
 [color] 6
 TOP.tb_system.u_cheep_top.u_cheep_peripherals.dlc_i.hw_r_fifo_data_out[31:0]

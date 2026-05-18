@@ -11,7 +11,7 @@
 #define IDAC_DEFAULT_CAL 15U
 #define VREF_DEFAULT_CAL 0b1111111111U
 
-#define N_VALID_SAMPLES  4U
+#define N_VALID_SAMPLES  2U
 
 volatile uint32_t debug __attribute__((section(".xheep_debug_mem")));
 
@@ -56,7 +56,7 @@ static int init_controller(gsr_controller_t *ctrl) {
         return -1;
     }
 
-    ctrl->mode = GSR_CTRL_MODE_BASELINE;
+    ctrl->mode = GSR_CTRL_MODE_PHASIC;
     ctrl->config.idac_code = 20U;
     ctrl->config.current_refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
     return 0;
@@ -77,7 +77,7 @@ static int measure(gsr_controller_t *ctrl, uint8_t n_samples) {
                 debug_mark((uint8_t)(0xE1), 0U);
                 return -1;
             }
-            debug_mark(samples_cnt, sample->G_nS);
+            debug_mark(0, sample->G_nS);
             samples_cnt++;
         } else if (st == GSR_STATUS_MISSED_UPDATE || st == GSR_STATUS_NO_NEW_SAMPLE) {
             continue;
@@ -89,12 +89,12 @@ static int measure(gsr_controller_t *ctrl, uint8_t n_samples) {
     return 0;
 }
 
-static int set_duty_and_measure(gsr_controller_t *ctrl, uint8_t D, uint32_t marker) {
+static int set_duty_and_measure(gsr_controller_t *ctrl, uint8_t duty_cycle_code, uint32_t marker, gsr_ctrl_mode_t mode) {
     gsr_status_t st;
 
     debug = marker;
-    ctrl->config.D = D;
-
+    ctrl->config.duty_cycle_code = duty_cycle_code;
+    ctrl->mode = mode;
     st = gsr_controller_set_config(ctrl);
     if (st != GSR_STATUS_OK) {
         debug_mark(0xE3U, (uint32_t)st);
@@ -114,17 +114,30 @@ int main(void) {
         return -1;
     }
 
-    if (set_duty_and_measure(&ctrl, 32U, 'D032') != 0) {
+    if (set_duty_and_measure(&ctrl, 8U, 'D12', GSR_CTRL_MODE_PHASIC) != 0) {
+        return -1;
+    }
+    if (set_duty_and_measure(&ctrl, 4U, 'D12', GSR_CTRL_MODE_PHASIC) != 0) {
         return -1;
     }
 
-    if (set_duty_and_measure(&ctrl, 200U, 'D200') != 0) {
+    if (set_duty_and_measure(&ctrl, 2U, 'D50', GSR_CTRL_MODE_PHASIC) != 0) {
         return -1;
     }
 
-    if (set_duty_and_measure(&ctrl, 255U, 'D255') != 0) {
+    if (set_duty_and_measure(&ctrl, 8U, 'D12', GSR_CTRL_MODE_BASELINE) != 0) {
         return -1;
     }
+    if (set_duty_and_measure(&ctrl, 4U, 'D12', GSR_CTRL_MODE_BASELINE) != 0) {
+        return -1;
+    }
+
+    if (set_duty_and_measure(&ctrl, 2U, 'D50', GSR_CTRL_MODE_BASELINE) != 0) {
+        return -1;
+    }
+    // if (set_duty_and_measure(&ctrl, 1U, 'D100') != 0) {
+    //     return -1;
+    // }
 
     debug = 'pass';
     return 0;
