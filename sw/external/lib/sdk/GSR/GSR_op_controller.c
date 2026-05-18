@@ -9,6 +9,7 @@
 #include "GSR_op_controller.h"
 
 #include <stddef.h>
+#define GUARD_IDC_NA                 50U // guard i_dc to prevent going out of range in the next conductance measurement; 50nA corresponds to 0.1 uS of change in conductance
 
 static bool gsr_opctrl_is_valid_request(const gsr_op_request_t *request) {
     if (request == NULL) {
@@ -49,6 +50,30 @@ gsr_opctrl_status_t gsr_opctrl_init(gsr_op_controller_t *ctrl,
 
     return GSR_OPCTRL_OK;
 }
+
+
+// static gsr_status_t controller_adjust_range_if_needed(gsr_controller_t *ctrl, gsr_controller_t *operating_point) {
+//     uint32_t guard_nA;
+//     uint32_t target_current_nA;
+//     uint8_t target_code;
+
+//     if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
+
+//     guard_nA  = k_range_2_profiles[(uint32_t)request->range].range * GUARD_IDC_NA;
+//     if (ctrl->max_current_nA <= guard_nA) { // not really because maybe the request is too optimistic and you can request a lower request 
+//         return GSR_STATUS_OUT_OF_RANGE;
+//     }
+
+//     target_current_nA = ctrl->max_current_nA - guard_nA;
+//     target_code = (uint8_t)(target_current_nA / GSR_IDAC_LSB_NA);
+
+//     if (target_code == 0U) {
+//         return GSR_STATUS_OUT_OF_RANGE;
+//     }
+
+//     operating_point->config.idac_code = target_code;
+// }
+
 
 /* Translate an application request into concrete controller configuration fields with preconfigured profiles 
 * (TODO: will be replaced with dynamic profiling) 
