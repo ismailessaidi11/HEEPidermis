@@ -16,6 +16,7 @@ class forward_input:
     G_uS: float
     i_dc_uA: float
     fs_Hz: float
+    D: float
 
 @dataclass
 class forward_output:
@@ -49,6 +50,7 @@ class ForwardPointResult:
 class reverse_input:
     G_uS: float
     fs_Hz: float
+    D: float
     delta_G_target_nS: float
     P_tot_max_uW: float
 
@@ -91,8 +93,8 @@ def forward_compute(model, input: forward_input, variance=1, avg_window=1):
                                     variance=variance, avg_window=avg_window)
 
         P_idc_uW = model.idc_power_uW(vin_mV, input.i_dc_uA)
-        P_vco_uW = model.pvco_from_vin(vin_mV)
-        P_cnt_uW = model.pcnt_from_vin(vin_mV)
+        P_vco_uW = model.pvco_from_vin(vin_mV, input.D)
+        P_cnt_uW = model.pcnt_from_vin(vin_mV, input.D)
         P_tot_uW = P_idc_uW + P_vco_uW + P_cnt_uW
 
         return ForwardPointResult(
@@ -137,7 +139,7 @@ def reverse_compute(model, input: reverse_input, variance=1, avg_window=1):
             valid_mask.append(False)
             continue
 
-        fwd_in = forward_input(G_uS=input.G_uS, i_dc_uA=i_dc, fs_Hz=input.fs_Hz)
+        fwd_in = forward_input(G_uS=input.G_uS, i_dc_uA=i_dc, fs_Hz=input.fs_Hz, D=input.D)
         result = forward_compute(model, fwd_in, variance=variance, avg_window=avg_window)
 
         dG = result.output.delta_G_uS

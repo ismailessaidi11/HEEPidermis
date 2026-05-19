@@ -114,7 +114,7 @@ def plot_forward_outputs(ax, result):
     ax.set_title("Output metrics")
     ax.grid(True, axis='y', alpha=0.3)
 
-def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1, reverse_result=None):
+def plot_forward_tradeoff(ax, model, result, D, variance=1, avg_window=1, reverse_result=None):
     G_uS = result.input.G_uS
     fs_Hz = result.input.fs_Hz
     max_i_dc = model.i_dc_max(result.input.G_uS)
@@ -139,8 +139,8 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1, reverse_r
         )
 
         p_idc = model.idc_power_uW(vin_mV, i_dc)
-        p_vco = model.pvco_from_vin(vin_mV)
-        p_cnt = model.pcnt_from_vin(vin_mV)
+        p_vco = model.pvco_from_vin(vin_mV, D)
+        p_cnt = model.pcnt_from_vin(vin_mV, D)
         ptot_vals.append(p_idc + p_vco + p_cnt)
 
     deltaG_vals_nS = np.asarray(deltaG_vals_uS, dtype=float) * 1000  # Convert to nS

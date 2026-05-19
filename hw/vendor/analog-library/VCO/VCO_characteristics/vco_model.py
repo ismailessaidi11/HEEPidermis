@@ -351,11 +351,11 @@ class VCOADCModel:
 
         return power_idc_uW.item() if np.isscalar(vin_mV) and np.isscalar(i_dc_uA) else power_idc_uW
     
-    def pvco_from_vin(self, vin_mV):
-        return np.interp(vin_mV, self.vin_data, self.pvco_data)
+    def pvco_from_vin(self, vin_mV, D=1.0):
+        return np.interp(vin_mV, self.vin_data, self.pvco_data) * D
 
-    def pcnt_from_vin(self, vin_mV):
-        return np.interp(vin_mV, self.vin_data, self.pcnt_data)
+    def pcnt_from_vin(self, vin_mV, D=1.0):
+        return np.interp(vin_mV, self.vin_data, self.pcnt_data) * D
     
     def i_dc_max(self, G_uS):
         return min(float(G_uS * (self.vdd_mV() - self.params.vin_min_mV) / 1000), self.params.idc_max)
