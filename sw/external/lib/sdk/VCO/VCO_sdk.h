@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include "VCO_decoder.h"
 #include "timer_sdk.h"
+#include "iDAC_ctrl.h"
 /*
 This file provides the low-level interface to the VCO-based front-end.
 It is used to configure the VCO channel, counter updates, and the conversion
@@ -64,9 +65,6 @@ uint32_t vco_get_kvco_Hz_per_V(uint32_t vin_uV);
 
 // Read the latest Vin value reconstructed from the VCO frequency.
 vco_status_t vco_get_Vin_uV(uint32_t *vin_uV);
-
-// Enable or disable the VCO.
-vco_status_t vco_enable(vco_channel_t channel, bool enable);
 
 // Interpolate Vin from a VCO oscillation frequency using the calibration table.
 uint32_t interpolate_Vin_uV(uint32_t f_target);

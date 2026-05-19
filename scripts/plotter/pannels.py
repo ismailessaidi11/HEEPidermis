@@ -138,7 +138,7 @@ def plot_forward_tradeoff(ax, model, result, D, variance=1, avg_window=1, revers
             )
         )
 
-        p_idc = model.idc_power_uW(vin_mV, i_dc)
+        p_idc = model.idc_power_uW(vin_mV, i_dc, D)
         p_vco = model.pvco_from_vin(vin_mV, D)
         p_cnt = model.pcnt_from_vin(vin_mV, D)
         ptot_vals.append(p_idc + p_vco + p_cnt)

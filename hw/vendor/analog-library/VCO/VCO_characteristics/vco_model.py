@@ -337,7 +337,7 @@ class VCOADCModel:
 
         return self._restore_shape(dG_uS, vin_scalar, idc_scalar)
     
-    def idc_power_uW(self, vin_mV, i_dc_uA):
+    def idc_power_uW(self, vin_mV, i_dc_uA, D=1.0):
         vin_arr = np.asarray(vin_mV, dtype=float)
         i_arr = np.asarray(i_dc_uA, dtype=float)
 
@@ -348,6 +348,7 @@ class VCOADCModel:
 
         invalid = (vin_arr < self.piecewise_threshold) | np.isnan(vin_arr) | np.isnan(i_arr)
         power_idc_uW = np.where(invalid, np.nan, power_idc_uW)
+        power_idc_uW *= D
 
         return power_idc_uW.item() if np.isscalar(vin_mV) and np.isscalar(i_dc_uA) else power_idc_uW
     

@@ -21,6 +21,14 @@ static inline void iDACs_enable(bool enable1, bool enable2) {
 }
 
 /**
+* @brief Trigger a single refresh of the iDACs 
+*/
+static inline void iDACs_trigger() {
+    *(volatile uint32_t*)(IDAC_CTRL_START_ADDRESS + IDAC_CTRL_MANUAL_TRIGGER_REG_OFFSET) = 1;
+    *(volatile uint32_t*)(IDAC_CTRL_START_ADDRESS + IDAC_CTRL_MANUAL_TRIGGER_REG_OFFSET) = 0;
+}
+
+/**
 * @brief Set the calibration value for the iDAC 1. Note that each iDAC has its own functions to minimize code overhead
 *
 * @param calibration The calibration value to set. This is a 5-bit value,

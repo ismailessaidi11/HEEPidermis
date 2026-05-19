@@ -116,6 +116,40 @@ static void vco_update_duty_windows(uint8_t duty_cycle_code) {
 }
 
 /*
+This function enables/disables the VCO and handles vco_data
+*/
+static vco_status_t vco_enable(vco_channel_t channel, bool enable)
+{
+    // VCO_trigger();
+    switch (channel)
+    {
+    case VCO_CHANNEL_NONE:
+        break;
+    case VCO_CHANNEL_P:
+        VCOp_enable(enable);
+        break;
+    case VCO_CHANNEL_N:
+        VCOn_enable(enable);
+        break;
+    case VCO_CHANNEL_DIFFERENTIAL:
+        VCOp_enable(enable);
+        VCOn_enable(enable);
+        break;
+    default:
+        return VCO_STATUS_INVALID_CONFIGURATION;
+    }
+    // also duty cycle the iDACs
+    iDACs_enable(enable, false);
+    iDACs_trigger();
+    if (enable) {
+        vco_flag_set(VCO_FLAG_ENABLED);
+    } else {
+        vco_flag_clear(VCO_FLAG_ENABLED);
+    }
+    return VCO_STATUS_OK;
+}
+
+/*  
 This function initializes the VCO, it uses an enum to set the channel
 used as either NONE, P Channel, N channel, or Pseudo Differential mode.
 */
@@ -314,37 +348,7 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
 
     vco_data.last_timestamp += refresh_cycles;
 
-    return VCO_STATUS_OK;
-}
 
-/*
-This function enables/disables the VCO and handles vco_data
-*/
-vco_status_t vco_enable(vco_channel_t channel, bool enable)
-{
-    // VCO_trigger();
-    switch (channel)
-    {
-    case VCO_CHANNEL_NONE:
-        break;
-    case VCO_CHANNEL_P:
-        VCOp_enable(enable);
-        break;
-    case VCO_CHANNEL_N:
-        VCOn_enable(enable);
-        break;
-    case VCO_CHANNEL_DIFFERENTIAL:
-        VCOp_enable(enable);
-        VCOn_enable(enable);
-        break;
-    default:
-        return VCO_STATUS_INVALID_CONFIGURATION;
-    }
-    if (enable) {
-        vco_flag_set(VCO_FLAG_ENABLED);
-    } else {
-        vco_flag_clear(VCO_FLAG_ENABLED);
-    }
     return VCO_STATUS_OK;
 }
 

@@ -92,7 +92,7 @@ def forward_compute(model, input: forward_input, variance=1, avg_window=1):
         delta_G_uS = model.delta_G_uS(G_uS=input.G_uS, vin_mV=vin_mV, i_dc_uA=input.i_dc_uA, fs_Hz=input.fs_Hz,
                                     variance=variance, avg_window=avg_window)
 
-        P_idc_uW = model.idc_power_uW(vin_mV, input.i_dc_uA)
+        P_idc_uW = model.idc_power_uW(vin_mV, input.i_dc_uA, input.D)
         P_vco_uW = model.pvco_from_vin(vin_mV, input.D)
         P_cnt_uW = model.pcnt_from_vin(vin_mV, input.D)
         P_tot_uW = P_idc_uW + P_vco_uW + P_cnt_uW
