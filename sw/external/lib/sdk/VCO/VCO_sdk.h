@@ -68,6 +68,9 @@ vco_status_t vco_get_Vin_uV(uint32_t *vin_uV);
 // Enable or disable the VCO.
 vco_status_t vco_enable(vco_channel_t channel, bool enable);
 
+// Interpolate Vin from a VCO oscillation frequency using the calibration table.
+uint32_t interpolate_Vin_uV(uint32_t f_target);
+
 // True while the selected VCO channel is currently enabled by the duty-cycle engine.
 bool vco_is_on(void);
 

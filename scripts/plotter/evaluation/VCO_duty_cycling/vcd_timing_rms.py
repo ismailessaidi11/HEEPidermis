@@ -5,6 +5,59 @@
 # Description: Extract GSR reference/computed samples from VCD/FST waveforms and
 #              compute RMS timing error around VCOp enable edges.
 
+"""
+Waveform post-processing for the VCO duty-cycling RMS experiment.
+
+This script is intended to be used with the firmware application:
+
+    sw/applications/test_vco_duty_cycling_rms/main.c
+
+For the marker-based RMS mode, the firmware must write 32-bit words to
+`debug_section` with the following layout:
+
+    [tag:8 bits][payload:24 bits]
+
+Expected tags:
+
+    0xA0: phase marker, payload = duty_cycle_code
+    0x00: valid conductance sample, payload = G_nS
+    0xAF: experiment done
+
+Ground-truth conductance is read from:
+
+    TOP.tb_system.u_cheep_top.u_analog_subsystem.rskin.G_nS
+
+Measured conductance is decoded from:
+
+    TOP.tb_system.u_cheep_top.u_core_v_mini_mcu.memory_subsystem_i.ram1_i.tc_ram_i.debug_section
+
+Reference timing rule:
+
+    duty_cycle_code != 1: use latest VCOp.EN rising edge before the sample
+    duty_cycle_code == 1: use latest VCOp.REFRESH rising edge before the sample
+
+Typical use from the repository root:
+
+    python3 scripts/plotter/evaluation/VCO_duty_cycling/vcd_timing_rms.py \
+      build/epfl_cheep_cheep_0.3.0/sim-verilator/logs/waves.fst \
+      --rms-by-duty-phase \
+      --start-ms 0 \
+      --stop-ms 100 \
+      --csv sequence_1_7.csv \
+      --raw-csv sequence_1_raw_7.csv
+
+Bare CSV filenames are written under this script's local `csv/` directory.
+
+There is also a timing-offset mode that is supported for debugging based on fixed timing offsets and 
+not on the marker policy implemented in sw/applications/test_vco_duty_cycling_rms/main.c:
+
+    python3 scripts/plotter/evaluation/VCO_duty_cycling/vcd_timing_rms.py \
+      build/epfl_cheep_cheep_0.3.0/sim-verilator/logs/waves.fst \
+      --start-ms 8 \
+      --stop-ms 20 \
+      --com-offset-ns 200000
+"""
+
 import argparse
 import csv
 import math

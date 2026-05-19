@@ -241,7 +241,7 @@ static uint32_t linear_interp(uint32_t x,
 }
 
 // Interpolate Vin from a VCO oscillation frequency using the calibration table.
-static uint32_t interpolate_Vin_uV(uint32_t f_target){
+uint32_t interpolate_Vin_uV(uint32_t f_target){
     return linear_interp(f_target, _table_fosc_Hz, _table_Vin_uV, _table_Vin_uV[0], _table_Vin_uV[TABLE_SIZE - 1]);
 }
 
