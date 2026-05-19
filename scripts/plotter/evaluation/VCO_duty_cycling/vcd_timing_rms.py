@@ -10,15 +10,22 @@ import csv
 import math
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 
 DEFAULT_EN_SIGNAL = "TOP.tb_system.u_cheep_top.u_analog_subsystem.u_VCOp.EN"
+DEFAULT_REFRESH_SIGNAL = "TOP.tb_system.u_cheep_top.u_analog_subsystem.u_VCOp.REFRESH"
 DEFAULT_G_REF_SIGNAL = "TOP.tb_system.u_cheep_top.u_analog_subsystem.rskin.G_nS"
 DEFAULT_G_COM_SIGNAL = (
     "TOP.tb_system.u_cheep_top.u_core_v_mini_mcu.memory_subsystem_i."
     "ram1_i.tc_ram_i.debug_section"
 )
+
+DBG_SAMPLE_TAG = 0x00
+DBG_PHASE_TAG = 0xA0
+DBG_DONE_TAG = 0xAF
+DEFAULT_CSV_DIR = Path(__file__).resolve().parent / "csv"
 
 
 TIME_SCALE_TO_NS = {
@@ -77,6 +84,19 @@ class Stats:
     stdev: float
     min: float
     max: float
+
+
+@dataclass
+class PhaseSample:
+    duty_code: int
+    ref_time_ns: float
+    sample_time_ns: float
+    g_ref_nS: float
+    g_com_nS: int
+
+    @property
+    def error_nS(self) -> float:
+        return float(self.g_com_nS) - self.g_ref_nS
 
 
 def waveform_lines(wave_path: str) -> Iterator[str]:
@@ -233,6 +253,25 @@ def rising_edges(trace: SignalTrace) -> List[int]:
             edges.append(tick)
         prev = value
     return edges
+
+
+def latest_edge_before(edges: List[int], tick: int, min_tick: Optional[int] = None) -> Optional[int]:
+    lo = 0
+    hi = len(edges)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if edges[mid] <= tick:
+            lo = mid + 1
+        else:
+            hi = mid
+
+    if lo == 0:
+        return None
+
+    edge = edges[lo - 1]
+    if min_tick is not None and edge < min_tick:
+        return None
+    return edge
 
 
 def high_windows(trace: SignalTrace) -> List[Tuple[int, int]]:
@@ -406,6 +445,182 @@ def write_duty_csv(path: str, windows: List[DutyWindow], sys_fclk_hz: float) -> 
             )
 
 
+def duty_percent_from_code(duty_code: int) -> float:
+    if duty_code <= 0:
+        return math.nan
+    return 100.0 / duty_code
+
+
+def decode_debug_word(value: object) -> Optional[Tuple[int, int]]:
+    if value is None:
+        return None
+
+    word = int(value) & 0xFFFFFFFF
+    tag = (word >> 24) & 0xFF
+    payload = word & 0x00FFFFFF
+    return tag, payload
+
+
+def collect_phase_samples(
+    traces: Dict[str, SignalTrace],
+    timescale_ns: float,
+    en_signal: str,
+    refresh_signal: str,
+    g_ref_signal: str,
+    g_com_signal: str,
+    start_ns: Optional[float],
+    stop_ns: Optional[float],
+    max_samples: Optional[int],
+    discard_first_per_phase: int,
+) -> List[PhaseSample]:
+    en_edges = rising_edges(traces[en_signal])
+    refresh_edges = rising_edges(traces[refresh_signal])
+    g_ref = traces[g_ref_signal]
+    debug = traces[g_com_signal]
+    start_tick = None if start_ns is None else ticks_from_ns(start_ns, timescale_ns)
+    stop_tick = None if stop_ns is None else ticks_from_ns(stop_ns, timescale_ns)
+    samples: List[PhaseSample] = []
+    current_duty_code: Optional[int] = None
+    current_phase_start_tick: Optional[int] = None
+    samples_seen_in_phase = 0
+
+    for tick, raw_value in debug.values:
+        if start_tick is not None and tick < start_tick:
+            continue
+        if stop_tick is not None and tick > stop_tick:
+            break
+
+        decoded = decode_debug_word(raw_value)
+        if decoded is None:
+            continue
+
+        tag, payload = decoded
+        if tag == DBG_PHASE_TAG:
+            current_duty_code = payload
+            current_phase_start_tick = tick
+            samples_seen_in_phase = 0
+            continue
+
+        if tag == DBG_DONE_TAG:
+            break
+
+        if tag != DBG_SAMPLE_TAG or current_duty_code is None:
+            continue
+
+        samples_seen_in_phase += 1
+        if samples_seen_in_phase <= discard_first_per_phase:
+            continue
+
+        ref_edges = refresh_edges if current_duty_code == 1 else en_edges
+        ref_tick = latest_edge_before(ref_edges, tick, min_tick=current_phase_start_tick)
+        if ref_tick is None:
+            continue
+
+        ref_value = value_at(g_ref, ref_tick)
+        if ref_value is None:
+            continue
+
+        samples.append(
+            PhaseSample(
+                duty_code=current_duty_code,
+                ref_time_ns=ref_tick * timescale_ns,
+                sample_time_ns=tick * timescale_ns,
+                g_ref_nS=float(ref_value),
+                g_com_nS=payload,
+            )
+        )
+
+        if max_samples is not None and len(samples) >= max_samples:
+            break
+
+    return samples
+
+
+def phase_sample_groups(samples: List[PhaseSample]) -> Dict[int, List[PhaseSample]]:
+    groups: Dict[int, List[PhaseSample]] = {}
+    for sample in samples:
+        groups.setdefault(sample.duty_code, []).append(sample)
+    return groups
+
+
+def phase_summary_rows(samples: List[PhaseSample]) -> List[Tuple[int, float, int, float, float, float, float]]:
+    rows = []
+    for duty_code, group in sorted(phase_sample_groups(samples).items(), key=lambda item: item[0], reverse=True):
+        errors = [sample.error_nS for sample in group]
+        rms = math.sqrt(sum(error ** 2 for error in errors) / len(errors)) if errors else math.nan
+        stats = summarize(errors)
+        rows.append((duty_code, duty_percent_from_code(duty_code), len(group), rms, stats.mean, stats.min, stats.max))
+    return rows
+
+
+def print_phase_rms(samples: List[PhaseSample]) -> None:
+    print("duty_code,duty_percent,n_samples,rms_nS,mean_error_nS,min_error_nS,max_error_nS")
+    for duty_code, duty_percent, count, rms, mean, min_error, max_error in phase_summary_rows(samples):
+        print(
+            f"{duty_code},"
+            f"{duty_percent:.3f},"
+            f"{count},"
+            f"{rms:.6f},"
+            f"{mean:+.6f},"
+            f"{min_error:+.6f},"
+            f"{max_error:+.6f}"
+        )
+
+
+def write_phase_rms_csv(path: str, samples: List[PhaseSample]) -> None:
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "duty_code",
+                "duty_percent",
+                "n_samples",
+                "rms_nS",
+                "mean_error_nS",
+                "min_error_nS",
+                "max_error_nS",
+            ]
+        )
+        for row in phase_summary_rows(samples):
+            writer.writerow([f"{row[0]}", f"{row[1]:.6f}", row[2], f"{row[3]:.6f}", f"{row[4]:.6f}", f"{row[5]:.6f}", f"{row[6]:.6f}"])
+
+
+def write_phase_raw_csv(path: str, samples: List[PhaseSample]) -> None:
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "duty_code",
+                "duty_percent",
+                "ref_time_ns",
+                "sample_time_ns",
+                "G_ref_nS",
+                "G_com_nS",
+                "error_nS",
+            ]
+        )
+        for sample in samples:
+            writer.writerow(
+                [
+                    sample.duty_code,
+                    f"{duty_percent_from_code(sample.duty_code):.6f}",
+                    f"{sample.ref_time_ns:.3f}",
+                    f"{sample.sample_time_ns:.3f}",
+                    f"{sample.g_ref_nS:.6f}",
+                    sample.g_com_nS,
+                    f"{sample.error_nS:.6f}",
+                ]
+            )
+
+
+def csv_output_path(path: str) -> str:
+    out_path = Path(path)
+    if not out_path.is_absolute() and out_path.parent == Path("."):
+        out_path = DEFAULT_CSV_DIR / out_path
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    return str(out_path)
+
+
 def ticks_from_ns(ns: float, timescale_ns: float) -> int:
     return int(round(ns / timescale_ns))
 
@@ -557,7 +772,13 @@ def main() -> int:
         action="store_true",
         help="Measure EN ON/OFF window lengths instead of GSR RMS alignment",
     )
+    parser.add_argument(
+        "--rms-by-duty-phase",
+        action="store_true",
+        help="Decode debug phase/sample markers and report RMS per duty-cycle phase",
+    )
     parser.add_argument("--en-signal", default=DEFAULT_EN_SIGNAL)
+    parser.add_argument("--refresh-signal", default=DEFAULT_REFRESH_SIGNAL)
     parser.add_argument("--g-ref-signal", default=DEFAULT_G_REF_SIGNAL)
     parser.add_argument("--g-com-signal", default=DEFAULT_G_COM_SIGNAL)
     parser.add_argument("--ref-offset-ns", type=float, default=0.0)
@@ -577,6 +798,17 @@ def main() -> int:
         help="Extra waveform time to parse after --stop-ms for the matching falling edge and computed sample",
     )
     parser.add_argument("--csv", default=None, help="Optional CSV output path")
+    parser.add_argument(
+        "--raw-csv",
+        default=None,
+        help="Optional raw sample CSV output path for --rms-by-duty-phase",
+    )
+    parser.add_argument(
+        "--discard-first-per-phase",
+        type=int,
+        default=0,
+        help="Discard this many parsed debug samples after each phase marker",
+    )
     parser.add_argument(
         "--refresh-rate-hz",
         type=float,
@@ -619,6 +851,8 @@ def main() -> int:
     wanted = [args.en_signal, args.g_ref_signal, args.g_com_signal]
     if args.measure_duty_cycles:
         wanted = [args.en_signal]
+    if args.rms_by_duty_phase:
+        wanted = [args.en_signal, args.refresh_signal, args.g_ref_signal, args.g_com_signal]
     parse_until_ns = None
     if args.stop_ms is not None:
         parse_until_ns = args.stop_ms * 1.0e6
@@ -659,7 +893,25 @@ def main() -> int:
             expected_period_cycles=expected_period_cc,
         )
         if args.csv is not None:
-            write_duty_csv(args.csv, windows, args.sys_fclk_hz)
+            write_duty_csv(csv_output_path(args.csv), windows, args.sys_fclk_hz)
+        return 0
+
+    if args.rms_by_duty_phase:
+        samples = collect_phase_samples(
+            traces=traces,
+            timescale_ns=timescale_ns,
+            en_signal=args.en_signal,
+            refresh_signal=args.refresh_signal,
+            g_ref_signal=args.g_ref_signal,
+            g_com_signal=args.g_com_signal,
+            start_ns=args.start_ms * 1.0e6 if args.start_ms is not None else None,
+            stop_ns=args.stop_ms * 1.0e6 if args.stop_ms is not None else None,
+            max_samples=args.max_samples,
+            discard_first_per_phase=args.discard_first_per_phase,
+        )
+        print_phase_rms(samples)
+        write_phase_rms_csv(csv_output_path(args.csv or "duty_rms_summary.csv"), samples)
+        write_phase_raw_csv(csv_output_path(args.raw_csv or "duty_rms_samples.csv"), samples)
         return 0
 
     if args.sweep_com_offset_ns is not None:
@@ -681,7 +933,7 @@ def main() -> int:
 
     print_samples(samples)
     if args.csv is not None:
-        write_csv(args.csv, samples)
+        write_csv(csv_output_path(args.csv), samples)
 
     return 0
 
