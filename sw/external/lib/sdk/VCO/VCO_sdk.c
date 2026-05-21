@@ -53,7 +53,8 @@ const uint32_t _table_kvco_Hz_per_V[TABLE_SIZE] = {
 #define VCO_FLAG_HAS_PREV        (1U << 0)
 #define VCO_FLAG_CONFIG_CHANGED  (1U << 1)
 #define VCO_FLAG_ENABLED         (1U << 2)
-#define VCO_FLAG_OUT_OF_BOUNDS   (1U << 3)
+#define VCO_FLAG_UNDERFLOW       (1U << 3)
+#define VCO_FLAG_OVERFLOW        (1U << 4)
 
 static uint32_t g_refresh_rate_Hz = 0;
 static vco_sdk_t vco_data;
@@ -275,8 +276,9 @@ static uint32_t linear_interp(uint32_t x,
 
 // Interpolate Vin from a VCO oscillation frequency using the calibration table.
 uint32_t interpolate_Vin_uV(uint32_t f_target){
-    if ((f_target < _table_fosc_Hz[0]) || (f_target > _table_fosc_Hz[TABLE_SIZE - 1])) vco_flag_set(VCO_FLAG_OUT_OF_BOUNDS);
-    else vco_flag_clear(VCO_FLAG_OUT_OF_BOUNDS);
+    if (f_target < _table_fosc_Hz[0]) vco_flag_set(VCO_FLAG_UNDERFLOW);
+    else if((f_target > _table_fosc_Hz[TABLE_SIZE - 1])) vco_flag_set(VCO_FLAG_OVERFLOW);
+    else vco_flag_clear(VCO_FLAG_UNDERFLOW | VCO_FLAG_OVERFLOW);
     return linear_interp(f_target, _table_fosc_Hz, _table_Vin_uV, _table_Vin_uV[0], _table_Vin_uV[TABLE_SIZE - 1]);
 }
 
@@ -349,9 +351,13 @@ vco_status_t vco_get_Vin_uV(uint32_t* vin_uV){
 
     vco_data.last_timestamp += refresh_cycles;
 
-    if (vco_flag_is_set(VCO_FLAG_OUT_OF_BOUNDS)) { // flag the out of bounds cases
-        return VCO_STATUS_OUT_OF_RANGE;
+    if (vco_flag_is_set(VCO_FLAG_UNDERFLOW)) { // flag the out of bounds cases
+        return VCO_STATUS_UNDERFLOW;
     } 
+    if (vco_flag_is_set(VCO_FLAG_OVERFLOW)) { // flag the out of bounds cases
+        return VCO_STATUS_OVERFLOW;
+    }
+    
     return VCO_STATUS_OK;
 }
 

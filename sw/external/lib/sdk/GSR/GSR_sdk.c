@@ -44,7 +44,8 @@ gsr_status_t gsr_status_from_vco(vco_status_t status) {
     if (status == VCO_STATUS_NO_NEW_SAMPLE) return GSR_STATUS_NO_NEW_SAMPLE;
     if (status == VCO_STATUS_MISSED_UPDATE) return GSR_STATUS_MISSED_UPDATE;
     if (status == VCO_STATUS_INVALID_ARGUMENT) return GSR_STATUS_INVALID_ARGUMENT;
-    if (status == VCO_STATUS_OUT_OF_RANGE) return GSR_STATUS_OUT_OF_RANGE;
+    if (status == VCO_STATUS_UNDERFLOW) return GSR_STATUS_UNDERFLOW;
+    if (status == VCO_STATUS_OVERFLOW) return GSR_STATUS_OVERFLOW;
     return GSR_STATUS_NOT_INITIALIZED;
 }
 

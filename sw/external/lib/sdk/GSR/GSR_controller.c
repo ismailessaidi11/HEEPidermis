@@ -24,13 +24,6 @@ gsr_status_t gsr_controller_set_current(gsr_controller_t *ctrl, uint8_t idac_cod
 
     if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
     current_nA = gsr_current_from_idac_code_nA(idac_code);
-    // if (ctrl->max_current_nA < GUARD_IDC_NA) { // TODO: handle that differently in the future
-    //     return GSR_STATUS_OUT_OF_RANGE; // current limits are too low to safely update, this is a protective check to prevent underflow in the next check
-    // }
-    // check validity of current range.
-    if (current_nA > ctrl->max_current_nA) { 
-        return GSR_STATUS_OUT_OF_RANGE;
-    }
 
     // current configuration 
     ctrl->config.idac_code = idac_code;
@@ -289,8 +282,8 @@ static gsr_status_t gsr_read_sample_now(gsr_controller_t *ctrl) {
     } else {
         ret = gsr_get_conductance_nS(&new_conductance_nS, &new_vin_uV);
     }
-    if (ret != GSR_STATUS_OK) { // OUT_OF_RANGE or NOT_INITIALIZED or MISSED_UPDATE or NO_NEW_SAMPLE
-        // Need to implememt correct strategy in gcase OUT_OF_RANGE or NO_NEW_SAMPLE or MISSED_UPDATE
+    if (ret != GSR_STATUS_OK) { // UNDERFLOW or OVERFLOW or NOT_INITIALIZED or MISSED_UPDATE or NO_NEW_SAMPLE
+        // Need to implememt correct strategy in gcase UNDERFLOW or OVERFLOW or NO_NEW_SAMPLE or MISSED_UPDATE
         ctrl->sample.valid = false;
         return ret;
     }

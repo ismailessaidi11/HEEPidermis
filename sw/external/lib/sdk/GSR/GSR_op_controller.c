@@ -10,7 +10,7 @@
 
 #include <stddef.h>
 #define GSR_IDAC_LSB_NA              40U
-#define GUARD_IDC_NA                 GSR_IDAC_LSB_NA << 1 // guard i_dc to prevent going out of range in the next conductance measurement; 80nA corresponds to 170 nS of change in conductance
+#define GUARD_IDC_NA                 (GSR_IDAC_LSB_NA * 3) // guard i_dc to prevent going out of range in the next conductance measurement; 80nA corresponds to 170 nS of change in conductance
 #define GSR_IDAC_MAX_CODE            255U
 
 static bool gsr_opctrl_is_valid_request(const gsr_op_request_t *request) {
@@ -33,11 +33,14 @@ static gsr_opctrl_status_t gsr_opctrl_status_from_gsr(gsr_status_t status) {
     if (status == GSR_STATUS_NOT_INITIALIZED) {
         return GSR_OPCTRL_NOT_INITIALIZED;
     }
-    if (status == GSR_STATUS_OUT_OF_RANGE) { // TODO: this is very wrong and will be changed 
-        return GSR_OPCTRL_UNSATISFIABLE;
+    if (status == GSR_STATUS_OVERFLOW) { 
+        return GSR_OPCTRL_MEASUREMENT_OVERFLOW;
+    }
+    if (status == GSR_STATUS_UNDERFLOW) { 
+        return GSR_OPCTRL_MEASUREMENT_UNDERFLOW;
     }
 
-    return GSR_OPCTRL_MEASUREMENT_ERROR;
+    return GSR_OPCTRL_MEASUREMENT_ERROR; // NO_NEW_SAMPLE or MISSED_UPDATE 
 }
 
 gsr_opctrl_status_t gsr_opctrl_init(gsr_op_controller_t *ctrl,
@@ -65,6 +68,9 @@ static bool range_to_idac_code(const gsr_op_controller_t *ctrl,
     uint32_t max_current_nA;
     uint32_t target_current_nA;
     uint32_t target_code;
+    uint32_t low_target_nA;
+    uint32_t medium_target_nA;
+    uint32_t high_target_nA;
 
     if (ctrl == NULL || idac_code == NULL || ctrl->controller == NULL) {
         return false;
@@ -75,25 +81,38 @@ static bool range_to_idac_code(const gsr_op_controller_t *ctrl,
     }
 
     max_current_nA = ctrl->controller->max_current_nA;
+   
+    if (max_current_nA <= GUARD_IDC_NA) {
+        return false;
+    }
+
+    low_target_nA = max_current_nA - GUARD_IDC_NA;
+
+    /* 1/4 away from i_dc,max => keep 3/4 of i_dc,max. */
+    medium_target_nA = max_current_nA - (max_current_nA >> 2);
+
+    /* 1/2 away from i_dc,max => keep 1/2 of i_dc,max. */
+    high_target_nA = max_current_nA >> 1;
+
+    /* LOW >= MEDIUM >= HIGH. */
+    if (medium_target_nA > low_target_nA) {
+        medium_target_nA = low_target_nA;
+    }
+
+    if (high_target_nA > medium_target_nA) {
+        high_target_nA = medium_target_nA;
+    }
 
     switch (range) {
     case LOW:
-        if (max_current_nA <= GUARD_IDC_NA) {
-            return false;
-        }
-        target_current_nA = max_current_nA - GUARD_IDC_NA;
+        target_current_nA = low_target_nA;
         break;
-
     case MEDIUM:
-        /* 1/4 away from i_dc,max => keep 3/4 of i_dc,max. */
-        target_current_nA = max_current_nA - (max_current_nA >> 2);
+        target_current_nA = medium_target_nA;
         break;
-
     case HIGH:
-        /* 1/2 away from i_dc,max => keep 1/2 of i_dc,max. */
-        target_current_nA = max_current_nA >> 1;
+        target_current_nA = high_target_nA;
         break;
-
     default:
         return false;
     }
@@ -155,6 +174,17 @@ static gsr_opctrl_status_t gsr_opctrl_apply_current(
     return gsr_opctrl_status_from_gsr(status);
 }
 
+/*
+ * Preventively retune the injected current after a valid conductance sample.
+ *
+ * The latest sample updates ctrl->controller->max_current_nA, which estimates
+ * the largest i_dc that can be used without pushing the VCO outside its valid
+ * operating region. This function computes a range-dependent target current
+ * below that limit, then applies only the iDAC/current change.
+ *
+ * This is a normal-operation guard-margin adjustment, not an emergency recovery
+ * path. Directional out-of-range events are handled separately with gsr_opctrl_recover_underflow and gsr_opctrl_recover_overflow
+ */
 gsr_opctrl_status_t gsr_opctrl_adjust_range(gsr_op_controller_t *ctrl) {
     gsr_opctrl_status_t status;
     gsr_controller_t operating_point;
@@ -263,9 +293,67 @@ gsr_opctrl_status_t gsr_opctrl_request(gsr_op_controller_t *ctrl,
     return gsr_opctrl_apply(ctrl, &planned_operating_point);
 }
 
+static gsr_opctrl_status_t gsr_opctrl_recover_underflow(gsr_op_controller_t *ctrl)
+{
+    uint8_t code;
+
+    if (ctrl == NULL || ctrl->controller == NULL) {
+        return GSR_OPCTRL_INVALID_REQUEST;
+    }
+
+    code = ctrl->controller->config.idac_code;
+
+    if (code <= 1U) {
+        return GSR_OPCTRL_UNSATISFIABLE;
+    }
+
+    /* Halve current. Round up so nonzero codes remain nonzero. */
+    code = (code + 1U) >> 1;
+
+    return gsr_opctrl_status_from_gsr(
+        gsr_controller_set_current(ctrl->controller, code)
+    );
+}
+
+static gsr_opctrl_status_t gsr_opctrl_recover_overflow(gsr_op_controller_t *ctrl)
+{
+    uint8_t code;
+    uint32_t next_code;
+    uint32_t max_code;
+
+    if (ctrl == NULL || ctrl->controller == NULL) {
+        return GSR_OPCTRL_INVALID_REQUEST;
+    }
+
+    code = ctrl->controller->config.idac_code;
+
+    max_code = ctrl->controller->max_current_nA / GSR_IDAC_LSB_NA;
+    if (max_code > GSR_IDAC_MAX_CODE) {
+        max_code = GSR_IDAC_MAX_CODE;
+    }
+
+    if (code >= max_code) {
+        return GSR_OPCTRL_UNSATISFIABLE;
+    }
+
+    /* Double current, saturating at max_code. */
+    next_code = (uint32_t)code << 1;
+    if (next_code > max_code) {
+        next_code = max_code;
+    }
+
+    if (next_code == code) {
+        return GSR_OPCTRL_UNSATISFIABLE;
+    }
+
+    return gsr_opctrl_status_from_gsr(
+        gsr_controller_set_current(ctrl->controller, (uint8_t)next_code)
+    );
+}
+
 gsr_opctrl_status_t gsr_opctrl_read_sample(gsr_op_controller_t *ctrl,
                                            gsr_sample_t *sample) {
-    gsr_status_t status;
+    gsr_opctrl_status_t status;
 
     if (ctrl == NULL || sample == NULL) {
         return GSR_OPCTRL_INVALID_REQUEST;
@@ -274,25 +362,34 @@ gsr_opctrl_status_t gsr_opctrl_read_sample(gsr_op_controller_t *ctrl,
         return GSR_OPCTRL_NOT_INITIALIZED;
     }
 
-    status = gsr_read_sample(ctrl->controller); // if out of bounds we need to readjust 
-    if (status != GSR_STATUS_OK) { // 
+    status = gsr_opctrl_status_from_gsr(gsr_read_sample(ctrl->controller)); 
+    
+    if (status == GSR_OPCTRL_MEASUREMENT_UNDERFLOW) { // VIN too low, we need to increase the range so decrease i_dc
         ctrl->has_valid_op = false;
-        return gsr_opctrl_status_from_gsr(status);
+        status = gsr_opctrl_recover_underflow(ctrl);
+        if (status == GSR_OPCTRL_UNSATISFIABLE) {
+            return GSR_OPCTRL_UNSATISFIABLE;
+        }
+        return GSR_OPCTRL_MEASUREMENT_UNDERFLOW;
+    } else if (status == GSR_OPCTRL_MEASUREMENT_OVERFLOW) { // VIN too high ==> so increase i_dc
+        ctrl->has_valid_op = false;
+        status = gsr_opctrl_recover_overflow(ctrl);
+        if (status == GSR_OPCTRL_UNSATISFIABLE) {
+            return GSR_OPCTRL_UNSATISFIABLE;
+        }
+        return GSR_OPCTRL_MEASUREMENT_OVERFLOW;
+    } else if (status != GSR_OPCTRL_OK) { // NOT_INITIALIZED, INVALID_ARGUMENT or MEASUREMENT_ERROR (which includes NO_NEW_SAMPLE and MISSED_UPDATE)
+        ctrl->has_valid_op = false;
+        return status;
     }
     ctrl->has_valid_op = true;
     
-    
-    // if (status == GSR_STATUS_OUT_OF_RANGE) {
-    //     status  = gsr_opctrl_adjust_range(ctrl);
-    //     if (status != GSR_OPCTRL_OK) {
-    //         return status;
-    //     }
-    // }
+    *sample = ctrl->controller->sample;
 
+    // After a successful read, we want to adjust i_dc closest as possible to i_dc max while respecting the range request.
     status = gsr_opctrl_adjust_range(ctrl);
 
-    *sample = ctrl->controller->sample;
-    return GSR_OPCTRL_OK;
+    return status;
 }
 
 void gsr_opctrl_shutdown(gsr_op_controller_t *ctrl) {

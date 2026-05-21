@@ -33,8 +33,8 @@
 #define VREF_DEFAULT_CAL     0b1111111111U
 #define IDAC_DEFAULT_CAL     15U
 #define VCO_ACCEL_RATIO      100U
-#define SAMPLE_ATTEMPT_LIMIT 16U
-#define N_READ_STEPS         5U
+#define SAMPLE_ATTEMPT_LIMIT 40U
+#define N_READ_STEPS         10U
 
 volatile uint32_t debug __attribute__((section(".xheep_debug_mem")));
 
@@ -138,9 +138,8 @@ int main(void) {
     attempts = 0U;
     while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
         opst = gsr_opctrl_read_sample(&opctrl, &sample);
-        debug_mark(0x30U, (uint32_t)opst);
         if (opst == GSR_OPCTRL_OK) {
-            debug_mark(0x40U, sample.G_nS);
+            debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
                    opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
@@ -170,9 +169,8 @@ int main(void) {
     attempts = 0U;
     while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
         opst = gsr_opctrl_read_sample(&opctrl, &sample);
-        debug_mark(0x30U, (uint32_t)opst);
         if (opst == GSR_OPCTRL_OK) {
-            debug_mark(0x40U, sample.G_nS);
+            debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
                    opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
@@ -202,13 +200,12 @@ int main(void) {
     attempts = 0U;
     while (reads_done < N_READ_STEPS && attempts < SAMPLE_ATTEMPT_LIMIT) {
         opst = gsr_opctrl_read_sample(&opctrl, &sample);
-        debug_mark(0x30U, (uint32_t)opst);
         if (opst == GSR_OPCTRL_OK) {
-            debug_mark(0x40U, sample.G_nS);
+            debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
                    opst == GSR_OPCTRL_MEASUREMENT_ERROR ||
-                   opst == GSR_OPCTRL_UNSATISFIABLE) {
+                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW) {
             wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xE5U, (uint32_t)opst);
