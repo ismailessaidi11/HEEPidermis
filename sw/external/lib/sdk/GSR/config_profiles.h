@@ -19,10 +19,6 @@ typedef struct {
 } gsr_range_profile_t;
 
 typedef struct {
-    uint8_t range;
-} gsr_range_2_profile_t;
-
-typedef struct {
     gsr_ctrl_mode_t mode;
 } gsr_resolution_profile_t;
 

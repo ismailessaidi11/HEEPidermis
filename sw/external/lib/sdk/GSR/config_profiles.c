@@ -7,12 +7,6 @@ const gsr_range_profile_t k_range_profiles[GSR_OPCTRL_PROFILE_COUNT] = {
     { .idac_code = 10U  },  // = 0.4 uA (high range)
 };
 
-const gsr_range_2_profile_t k_range_2_profiles[GSR_OPCTRL_PROFILE_COUNT] = { // we aim for an i_dc close to the max because that is our implicit low power condition  
-    { .range = 1U }, // = i_dc,max - 1 * GUARD_IDC_NA (low range) 
-    { .range = 2U }, // = i_dc,max - 2 * GUARD_IDC_NA (mid range)
-    { .range = 4U  },  // = i_dc,max - 4 * GUARD_IDC_NA (high range)
-};
-
 // For now: resolution -> higher refresh rate (higher OSR) -> mode corresponding to higher refresh rate in the controller config
 const gsr_resolution_profile_t k_resolution_profiles[GSR_OPCTRL_PROFILE_COUNT] = {
     { .mode = GSR_CTRL_MODE_BASELINE }, // lowest OSR (or refresh rate)

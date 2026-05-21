@@ -19,7 +19,7 @@ static uint32_t calculate_baseline(uint32_t prev_baseline, uint32_t sample) {
 }
 
 // Reconfigure the iDAC current used for conductance measurement, with range checking based on the current limits.
-static gsr_status_t controller_set_current(gsr_controller_t *ctrl, uint8_t idac_code) {
+gsr_status_t gsr_controller_set_current(gsr_controller_t *ctrl, uint8_t idac_code) {
     uint32_t current_nA;
 
     if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
@@ -59,7 +59,11 @@ static gsr_status_t controller_set_vco(gsr_controller_t *ctrl, gsr_ctrl_mode_t m
             return GSR_STATUS_INVALID_ARGUMENT;
     }
     ctrl->config.current_refresh_rate_Hz = new_rate_Hz; // keep track of the current refresh rate in the controller state for reference
-    ret = gsr_status_from_vco(vco_config(ctrl->config.channel, new_rate_Hz, duty_cycle_code));
+    if(!ctrl->dlc_used) {
+        ret = gsr_status_from_vco(vco_config(ctrl->config.channel, new_rate_Hz, duty_cycle_code));
+    } else {
+        ret = gsr_status_from_vco(vco_dlc_config(ctrl->config.channel, new_rate_Hz));
+    }
     return ret;
 }
 
@@ -209,6 +213,8 @@ gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl) {
     ctrl->settle_threshold_nS = 25;
     ctrl->recovery_count_required = 8;
 
+    ctrl->dlc_used = false;
+
     return GSR_STATUS_OK;
 }
 
@@ -224,7 +230,7 @@ gsr_status_t gsr_controller_set_config(gsr_controller_t *ctrl) {
     }
 
     // setup the config of the iDAC Hardware registers
-    ret = controller_set_current(ctrl, config->idac_code);
+    ret = gsr_controller_set_current(ctrl, config->idac_code);
     if (ret != GSR_STATUS_OK) return ret;
     
     // setup the config of the VCO Hardware registers
@@ -237,12 +243,13 @@ gsr_status_t gsr_controller_set_config(gsr_controller_t *ctrl) {
 
 // Initialize controller state variables and start the GSR front-end.
 gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
-
+    
+    gsr_status_t ret;
     if (ctrl == 0) {
         return GSR_STATUS_INVALID_ARGUMENT;
     }
 
-    ctrl->mode = GSR_CTRL_MODE_INIT;
+    ctrl->mode = GSR_CTRL_MODE_BASELINE;
     gsr_sample_t init_sample = {
         .G_nS = 0U,
         .prev_G_nS = 0U,
@@ -261,7 +268,12 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl) {
     ctrl->initialized = false;
 
     // initialize with the baseline refresh rate
-    return gsr_init(ctrl->config.channel, ctrl->config.baseline_refresh_rate_Hz, ctrl->config.idac_code);
+    if (ctrl->dlc_used) {
+        ret = gsr_init_dlc(ctrl->config.channel, ctrl->config.baseline_refresh_rate_Hz, ctrl->config.idac_code, &ctrl->dlc_cfg);
+    } else {
+        ret = gsr_init(ctrl->config.channel, ctrl->config.baseline_refresh_rate_Hz, ctrl->config.idac_code);
+    }
+    return ret;
 
 }
 
@@ -319,7 +331,7 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl)
 {
     if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
 
-    if (ctrl->config.duty_cycle_code == 1U) { // no duty cycling 
+    if (ctrl->config.duty_cycle_code == 1U || ctrl->dlc_used) { // no duty cycling or event based reading 
         return gsr_read_sample_now(ctrl);
     }
 

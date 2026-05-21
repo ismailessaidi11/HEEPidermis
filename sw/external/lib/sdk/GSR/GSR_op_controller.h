@@ -21,7 +21,8 @@ typedef enum {
     GSR_OPCTRL_UNSATISFIABLE,
     GSR_OPCTRL_NOT_INITIALIZED,
     GSR_OPCTRL_NO_VALID_SAMPLE,
-    GSR_OPCTRL_MEASUREMENT_ERROR
+    GSR_OPCTRL_MEASUREMENT_ERROR,
+    GSR_OPCTRL_INVALID_ARGUMENT
 } gsr_opctrl_status_t;
 
 /*
@@ -51,8 +52,8 @@ typedef enum {
 /* Thin request layer state. The GSR controller owns measurement/config state. */
 typedef struct {
     gsr_controller_t *controller;    /* Lower-layer controller configured by requests. */
-
-    bool has_active_op;              /* True after a successful apply/request. */
+    gsr_op_request_t current_request; /* The most recent valid request. */
+    bool has_valid_op;              /* True after a successful apply/request that resulted in a valid sample. */
     bool initialized;                /* True after gsr_opctrl_init(). */
 } gsr_op_controller_t;
 
