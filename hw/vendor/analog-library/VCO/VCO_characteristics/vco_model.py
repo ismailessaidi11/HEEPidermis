@@ -341,9 +341,8 @@ class VCOADCModel:
         vin_arr = np.asarray(vin_mV, dtype=float)
         i_arr = np.asarray(i_dc_uA, dtype=float)
 
-        vin_V = vin_arr * 1e-3
         i_dc_A = i_arr * 1e-6
-        power_idc_uW = i_dc_A * vin_V * 1e6
+        power_idc_uW = i_dc_A * self.params.vdd * 1e6
 
 
         invalid = (vin_arr < self.piecewise_threshold) | np.isnan(vin_arr) | np.isnan(i_arr)

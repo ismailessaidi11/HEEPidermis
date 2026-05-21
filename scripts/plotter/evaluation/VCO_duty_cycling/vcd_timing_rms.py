@@ -33,8 +33,10 @@ Measured conductance is decoded from:
 
 Reference timing rule:
 
-    duty_cycle_code != 1: use latest VCOp.EN rising edge before the sample
-    duty_cycle_code == 1: use latest VCOp.REFRESH rising edge before the sample
+    In marker-based RMS mode, G_ref is the time-weighted average of rskin.G_nS
+    over the latest completed VCO integration window before the debug sample.
+    An integration window is the interval between two consecutive VCOp.REFRESH
+    rising edges during which VCOp.EN is high.
 
 Typical use from the repository root:
 
@@ -327,6 +329,61 @@ def latest_edge_before(edges: List[int], tick: int, min_tick: Optional[int] = No
     return edge
 
 
+def latest_active_refresh_window_before(
+    refresh_edges: List[int],
+    en_trace: SignalTrace,
+    tick: int,
+    min_tick: Optional[int] = None,
+) -> Optional[Tuple[int, int]]:
+    lo = 0
+    hi = len(refresh_edges)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if refresh_edges[mid] <= tick:
+            lo = mid + 1
+        else:
+            hi = mid
+
+    for idx in range(lo - 1, 0, -1):
+        start_tick = refresh_edges[idx - 1]
+        end_tick = refresh_edges[idx]
+        if min_tick is not None and start_tick < min_tick:
+            return None
+        if end_tick <= start_tick:
+            continue
+
+        mid_tick = start_tick + ((end_tick - start_tick) // 2)
+        if is_logic_high(value_at(en_trace, mid_tick)):
+            return start_tick, end_tick
+
+    return None
+
+
+def average_value_between(trace: SignalTrace, start_tick: int, end_tick: int) -> Optional[float]:
+    if end_tick <= start_tick:
+        return None
+
+    current_value = value_at(trace, start_tick)
+    if current_value is None:
+        return None
+
+    total = 0.0
+    cursor = start_tick
+
+    for tick, value in trace.values:
+        if tick <= start_tick:
+            continue
+        if tick >= end_tick:
+            break
+
+        total += float(current_value) * float(tick - cursor)
+        current_value = value
+        cursor = tick
+
+    total += float(current_value) * float(end_tick - cursor)
+    return total / float(end_tick - start_tick)
+
+
 def high_windows(trace: SignalTrace) -> List[Tuple[int, int]]:
     windows: List[Tuple[int, int]] = []
     prev = "x"
@@ -526,8 +583,8 @@ def collect_phase_samples(
     max_samples: Optional[int],
     discard_first_per_phase: int,
 ) -> List[PhaseSample]:
-    en_edges = rising_edges(traces[en_signal])
     refresh_edges = rising_edges(traces[refresh_signal])
+    en = traces[en_signal]
     g_ref = traces[g_ref_signal]
     debug = traces[g_com_signal]
     start_tick = None if start_ns is None else ticks_from_ns(start_ns, timescale_ns)
@@ -564,19 +621,24 @@ def collect_phase_samples(
         if samples_seen_in_phase <= discard_first_per_phase:
             continue
 
-        ref_edges = refresh_edges if current_duty_code == 1 else en_edges
-        ref_tick = latest_edge_before(ref_edges, tick, min_tick=current_phase_start_tick)
-        if ref_tick is None:
+        ref_window = latest_active_refresh_window_before(
+            refresh_edges,
+            en,
+            tick,
+            min_tick=current_phase_start_tick,
+        )
+        if ref_window is None:
             continue
 
-        ref_value = value_at(g_ref, ref_tick)
+        ref_start_tick, ref_end_tick = ref_window
+        ref_value = average_value_between(g_ref, ref_start_tick, ref_end_tick)
         if ref_value is None:
             continue
 
         samples.append(
             PhaseSample(
                 duty_code=current_duty_code,
-                ref_time_ns=ref_tick * timescale_ns,
+                ref_time_ns=ref_end_tick * timescale_ns,
                 sample_time_ns=tick * timescale_ns,
                 g_ref_nS=float(ref_value),
                 g_com_nS=payload,

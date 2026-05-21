@@ -11,9 +11,6 @@ make clean all
 make cheep-gen
 make verilator-build
 
-rm -f scripts/plotter/evaluation/VCO_duty_cycling/csv/sequence_*_${dataset}.csv
-rm -f scripts/plotter/evaluation/VCO_duty_cycling/csv/duty_rms_cross_validation_${dataset}.csv
-
 for seq in 1 2 3 4; do
   echo "=== Running sequence $seq ==="
 
@@ -36,5 +33,4 @@ EOF
 
 done
 
-python3 scripts/plotter/evaluation/VCO_duty_cycling/summarize_duty_rms_sequences.py --out "duty_rms_cross_validation_${dataset}.csv" scripts/plotter/evaluation/VCO_duty_cycling/csv/sequence_1_${dataset}.csv scripts/plotter/evaluation/VCO_duty_cycling/csv/sequence_2_${dataset}.csv scripts/plotter/evaluation/VCO_duty_cycling/csv/sequence_3_${dataset}.csv scripts/plotter/evaluation/VCO_duty_cycling/csv/sequence_4_${dataset}.csv 
 make verilator-waves

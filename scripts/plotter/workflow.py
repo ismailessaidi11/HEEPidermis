@@ -58,7 +58,8 @@ class reverse_input:
 @dataclass
 class reverse_output:
     feasible: bool
-    i_dc_opt_uA: Optional[float]
+    i_dc_power_opt_uA: Optional[float]
+    i_dc_delta_G_opt_uA: Optional[float]
     delta_G_opt_uS: Optional[float]
     P_tot_opt_uW: Optional[float]
     reason: Optional[str] = None
@@ -129,7 +130,11 @@ def reverse_compute(model, input: reverse_input, variance=1, avg_window=1):
     P_tot_vals = []
     valid_mask = []
 
-    for i_dc in i_vals:
+    min_delta_G = np.inf
+    min_power = np.inf
+    idx_power_opti = 0
+    idx_delta_G_opti = 0
+    for i, i_dc in enumerate(i_vals):
         vin_mV = model.vin_from_G(input.G_uS, i_dc)
 
         # basic validity
@@ -144,6 +149,15 @@ def reverse_compute(model, input: reverse_input, variance=1, avg_window=1):
 
         dG = result.output.delta_G_uS
         Ptot = result.output.P_tot_uW
+        if (dG < min_delta_G):
+            min_delta_G = dG
+            idx_delta_G_opti = i
+
+
+        if (Ptot < min_power):
+            min_power = Ptot
+            idx_power_opti = i
+
         valid = np.isfinite(dG) and np.isfinite(Ptot) 
 
         delta_G_vals.append(dG)
@@ -167,7 +181,8 @@ def reverse_compute(model, input: reverse_input, variance=1, avg_window=1):
             input=input,
             output=reverse_output(
                 feasible=False,
-                i_dc_opt_uA=None,
+                i_dc_power_opt_uA=None,
+                i_dc_delta_G_opt_uA=None,
                 delta_G_opt_uS=None,
                 P_tot_opt_uW=None,
                 reason="No i_dc satisfies both ΔG target and power limit."
@@ -178,16 +193,17 @@ def reverse_compute(model, input: reverse_input, variance=1, avg_window=1):
             feasible_mask=feasible_mask
         )
 
-    #NOTE VERY IMPORTANT: This is the minimal power constraint applied (Since higher i_dc gives lower P_tot)
-    idx = np.where(feasible_mask)[0][-1]
+    # #NOTE VERY IMPORTANT: This is the minimal power constraint applied (Since higher i_dc gives lower P_tot)
+    # idx = np.where(feasible_mask)[0][-1]
 
     return ReverseResult(
         input=input,
         output=reverse_output(
             feasible=True,
-            i_dc_opt_uA=float(i_vals[idx]),
-            delta_G_opt_uS=float(delta_G_vals[idx]),
-            P_tot_opt_uW=float(P_tot_vals[idx]),
+            i_dc_power_opt_uA=float(i_vals[idx_power_opti]),
+            i_dc_delta_G_opt_uA=float(i_vals[idx_delta_G_opti]),
+            P_tot_opt_uW=float(P_tot_vals[idx_power_opti]),
+            delta_G_opt_uS=float(delta_G_vals[idx_delta_G_opti]),
             reason=None
         ),
         i_dc_grid_uA=i_vals,

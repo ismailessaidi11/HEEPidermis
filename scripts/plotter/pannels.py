@@ -177,14 +177,16 @@ def plot_forward_tradeoff(ax, model, result, D, variance=1, avg_window=1, revers
                 color='green',
                 label='feasible region'
             )
-        i_opt = reverse_result.output.i_dc_opt_uA
+        i_delta_G_opt = reverse_result.output.i_dc_delta_G_opt_uA
+        i_power_opt = reverse_result.output.i_dc_power_opt_uA
         dG_opt_nS = reverse_result.output.delta_G_opt_uS * 1000
         P_opt = reverse_result.output.P_tot_opt_uW
 
-        ax.plot(i_opt, dG_opt_nS, 'g*', markersize=8, zorder=6)
-        ax2.axvline(i_opt, color='green', linestyle='--', alpha=0.5, label='optimal $i_{dc}$')
+        ax.plot(i_delta_G_opt, dG_opt_nS, 'g*', markersize=8, zorder=6)
+        ax2.axvline(i_delta_G_opt, color='green', linestyle='--', alpha=0.5, label='optimal delta_G $i_{dc}$')
 
-        ax2.plot(i_opt, P_opt, 'g*', markersize=8, zorder=6)
+        ax2.plot(i_power_opt, P_opt, 'b*', markersize=8, zorder=6)
+        ax2.axvline(i_power_opt, color='blue', linestyle='--', alpha=0.5, label='optimal power $i_{dc}$')
 
     elif reverse_result is not None and not reverse_result.output.feasible:
         ax.text(
@@ -217,7 +219,8 @@ def plot_summary(ax, result, model, variance=1, avg_window=1,reverse_result=None
         txt += f"\n─────────────\nOptimal i_dc search...\n"
         if reverse_result.output.feasible:
             txt += (
-                f"i_dc_opt:    {reverse_result.output.i_dc_opt_uA:.4f} μA\n"
+                f"i_delta_G_opt:    {reverse_result.output.i_dc_delta_G_opt_uA:.4f} μA\n"
+                f"i_power_opt:    {reverse_result.output.i_dc_power_opt_uA:.4f} μA\n"
                 f"ΔG_opt:      {reverse_result.output.delta_G_opt_uS * 1000:.4f} nS\n"
                 f"P_opt:       {reverse_result.output.P_tot_opt_uW:.4f} μW\n"
             )
