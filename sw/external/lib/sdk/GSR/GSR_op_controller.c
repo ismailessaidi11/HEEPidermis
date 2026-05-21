@@ -10,7 +10,7 @@
 
 #include <stddef.h>
 #define GSR_IDAC_LSB_NA              40U
-#define GUARD_IDC_NA                 (GSR_IDAC_LSB_NA * 3) // guard i_dc to prevent going out of range in the next conductance measurement; 80nA corresponds to 170 nS of change in conductance
+#define GUARD_IDC_NA                 (GSR_IDAC_LSB_NA * 3) // guard i_dc to prevent going out of range in the next conductance measurement; 12nA corresponds to 255 nS of change in conductance
 #define GSR_IDAC_MAX_CODE            255U
 
 static bool gsr_opctrl_is_valid_request(const gsr_op_request_t *request) {
@@ -364,14 +364,14 @@ gsr_opctrl_status_t gsr_opctrl_read_sample(gsr_op_controller_t *ctrl,
 
     status = gsr_opctrl_status_from_gsr(gsr_read_sample(ctrl->controller)); 
     
-    if (status == GSR_OPCTRL_MEASUREMENT_UNDERFLOW) { // VIN too low, we need to increase the range so decrease i_dc
+    if (status == GSR_OPCTRL_MEASUREMENT_UNDERFLOW) { // VIN too low ==> decrease i_dc
         ctrl->has_valid_op = false;
         status = gsr_opctrl_recover_underflow(ctrl);
         if (status == GSR_OPCTRL_UNSATISFIABLE) {
             return GSR_OPCTRL_UNSATISFIABLE;
         }
         return GSR_OPCTRL_MEASUREMENT_UNDERFLOW;
-    } else if (status == GSR_OPCTRL_MEASUREMENT_OVERFLOW) { // VIN too high ==> so increase i_dc
+    } else if (status == GSR_OPCTRL_MEASUREMENT_OVERFLOW) { // VIN too high ==> increase i_dc
         ctrl->has_valid_op = false;
         status = gsr_opctrl_recover_overflow(ctrl);
         if (status == GSR_OPCTRL_UNSATISFIABLE) {
