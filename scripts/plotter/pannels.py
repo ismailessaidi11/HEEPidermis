@@ -39,9 +39,10 @@ def plot_forward_summary(ax, result, model=None):
     ax.axis("off")
 
     txt = (
-        f"G:        {result.input.G_uS:.4f} μS\n"
-        f"i_dc:     {result.input.i_dc_uA:.4f} μA\n"
-        f"f_s:      {result.input.fs_Hz:.4f} Hz\n\n"
+        f"G:        {result.input.G_uS:.2f} μS\n"
+        f"i_dc:     {result.input.i_dc_uA:.2f} μA\n"
+        f"f_s:      {result.input.fs_Hz:.0f} Hz\n"
+        f"D:        {result.input.D * 100:.0f}%\n\n"
         f"V_in:     {result.intermediate.vin_mV:.4f} mV\n"
         f"ΔV_in:    {result.intermediate.dVin_mV*1000:.4f} μV\n"
         f"f_osc:    {result.intermediate.f_osc_kHz:.4f} kHz\n"
@@ -118,6 +119,7 @@ def plot_forward_tradeoff(ax, model, result, D, variance=1, avg_window=1, revers
     G_uS = result.input.G_uS
     fs_Hz = result.input.fs_Hz
     max_i_dc = model.i_dc_max(result.input.G_uS)
+    f_int_Hz = fs_Hz / D
 
     i_vals = model.params.i_dc_range
     i_vals = i_vals[i_vals <= max_i_dc] 
@@ -132,7 +134,7 @@ def plot_forward_tradeoff(ax, model, result, D, variance=1, avg_window=1, revers
                 G_uS=G_uS,
                 vin_mV=vin_mV,
                 i_dc_uA=i_dc,
-                fs_Hz=fs_Hz,
+                f_int_Hz=f_int_Hz,
                 variance=variance,
                 avg_window=avg_window
             )

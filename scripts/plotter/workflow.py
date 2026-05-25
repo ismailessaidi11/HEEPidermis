@@ -80,17 +80,19 @@ def forward_compute(model, input: forward_input, variance=1, avg_window=1):
         f_osc_kHz = model.fosc_from_vin(vin_mV)
         kvco_kHz_per_mV = model.kvco_kHz_per_mV(vin_mV)
 
-        df_osc_sampling_Hz = model.df_osc_sampling_Hz(fs_Hz=input.fs_Hz, avg_window=avg_window)
-        df_osc_adev_Hz = variance * model.df_osc_adev_Hz(vin_mV=vin_mV, fs_Hz=input.fs_Hz)
-        df_osc_Hz = max(df_osc_sampling_Hz, df_osc_adev_Hz)
+        f_int_Hz = input.fs_Hz / input.D
+
+        df_osc_sampling_Hz = model.df_osc_sampling_Hz(f_int_Hz=f_int_Hz, avg_window=avg_window)
+        df_osc_adev_Hz = variance * model.df_osc_adev_Hz(vin_mV=vin_mV, f_int_Hz=f_int_Hz)
+        df_osc_Hz = model.df_osc_Hz(vin_mV=vin_mV, f_int_Hz=f_int_Hz, variance=variance, avg_window=avg_window)
         dVin_mV = model.dVin_mV(df_osc_Hz=df_osc_Hz, vin_mV=vin_mV)
 
         min_delta_G_nS, max_delta_G_nS = model.compute_delta_G_range_nS(
                                             G_uS=input.G_uS,
-                                            fs_Hz=input.fs_Hz,
+                                            f_int_Hz=f_int_Hz,
                                             variance=variance, 
                                             avg_window=avg_window)
-        delta_G_uS = model.delta_G_uS(G_uS=input.G_uS, vin_mV=vin_mV, i_dc_uA=input.i_dc_uA, fs_Hz=input.fs_Hz,
+        delta_G_uS = model.delta_G_uS(G_uS=input.G_uS, vin_mV=vin_mV, i_dc_uA=input.i_dc_uA, f_int_Hz=f_int_Hz,
                                     variance=variance, avg_window=avg_window)
 
         P_idc_uW = model.idc_power_uW(vin_mV, input.i_dc_uA, input.D)
