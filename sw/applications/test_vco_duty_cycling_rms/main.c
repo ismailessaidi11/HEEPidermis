@@ -5,7 +5,6 @@
 #include "x-heep.h"
 
 #include "GSR_controller.h"
-#include "duty_sequence_select.h"
 
 #define SYS_FCLK_HZ      10000000U
 #define IREF_DEFAULT_CAL 255U
