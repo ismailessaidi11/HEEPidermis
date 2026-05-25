@@ -72,15 +72,26 @@ def plot_forward_df_components(ax, result):
     labels = [
         r'$\Delta f_{samp}$',
         r'$\Delta f_{adev}$',
-        r'$\Delta f_{osc}$'
+        r'$\Delta f_{osc}$ = max'
     ]
     values = [
         result.intermediate.df_osc_sampling_Hz,
         result.intermediate.df_osc_adev_Hz,
         result.intermediate.df_osc_Hz
     ]
-
-    ax.bar(labels, values)
+    
+    # Use different colors to highlight that df_osc is the max
+    colors = ['steelblue', 'steelblue', 'coral']
+    
+    bars = ax.bar(labels, values, color=colors, alpha=0.7)
+    
+    # Add annotation on the max bar showing it's the maximum
+    max_bar = bars[2]
+    height = max_bar.get_height()
+    ax.text(max_bar.get_x() + max_bar.get_width()/2., height,
+            'max(sampling, adev)',
+            ha='center', va='bottom', fontsize=9, style='italic', color='coral')
+    
     ax.set_ylabel("Hz")
     ax.set_title("Frequency error contributions")
     ax.grid(True, axis='y', alpha=0.3)
