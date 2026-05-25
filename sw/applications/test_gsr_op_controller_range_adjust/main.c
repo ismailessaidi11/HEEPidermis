@@ -34,7 +34,7 @@
 #define IDAC_DEFAULT_CAL     15U
 #define VCO_ACCEL_RATIO      100U
 #define SAMPLE_ATTEMPT_LIMIT 40U
-#define N_READ_STEPS         10U
+#define N_READ_STEPS         6U
 
 volatile uint32_t debug __attribute__((section(".xheep_debug_mem")));
 
@@ -142,7 +142,9 @@ int main(void) {
             debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
-                   opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
+                   opst == GSR_OPCTRL_MEASUREMENT_ERROR ||
+                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW ||
+                   opst == GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xEBU, (uint32_t)opst);
@@ -173,7 +175,9 @@ int main(void) {
             debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
-                   opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
+                   opst == GSR_OPCTRL_MEASUREMENT_ERROR ||
+                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW ||
+                   opst == GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xE8U, (uint32_t)opst);
@@ -205,7 +209,8 @@ int main(void) {
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
                    opst == GSR_OPCTRL_MEASUREMENT_ERROR ||
-                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW) {
+                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW ||
+                   opst == GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xE5U, (uint32_t)opst);

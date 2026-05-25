@@ -19,19 +19,12 @@ static uint32_t calculate_baseline(uint32_t prev_baseline, uint32_t sample) {
 }
 
 // Reconfigure the iDAC current used for conductance measurement, with range checking based on the current limits.
-gsr_status_t gsr_controller_set_current(gsr_controller_t *ctrl, uint8_t idac_code) {
-    uint32_t current_nA;
-
-    if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
-    current_nA = gsr_current_from_idac_code_nA(idac_code);
-
+void gsr_controller_set_current(gsr_controller_t *ctrl, uint8_t idac_code) {
     // current configuration 
     ctrl->config.idac_code = idac_code;
     
     // Delegate actual hardware/current model update to the clean SDK
     gsr_update_current(idac_code);
-
-    return GSR_STATUS_OK;
 }
 
 static gsr_status_t controller_set_vco(gsr_controller_t *ctrl, gsr_ctrl_mode_t mode, uint8_t duty_cycle_code) {
@@ -223,8 +216,7 @@ gsr_status_t gsr_controller_set_config(gsr_controller_t *ctrl) {
     }
 
     // setup the config of the iDAC Hardware registers
-    ret = gsr_controller_set_current(ctrl, config->idac_code);
-    if (ret != GSR_STATUS_OK) return ret;
+    gsr_controller_set_current(ctrl, config->idac_code);
     
     // setup the config of the VCO Hardware registers
     ret = controller_set_vco(ctrl, ctrl->mode, config->duty_cycle_code);

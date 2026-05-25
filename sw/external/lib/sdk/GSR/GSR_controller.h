@@ -81,7 +81,7 @@ gsr_status_t gsr_controller_init(gsr_controller_t *ctrl);
 gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl);
 
 // Update the idac code and apply it to the hardware.
-gsr_status_t gsr_controller_set_current(gsr_controller_t *ctrl, uint8_t idac_code);
+void gsr_controller_set_current(gsr_controller_t *ctrl, uint8_t idac_code);
 
 // Update the controller configuration and apply it to the hardware.
 gsr_status_t gsr_controller_set_config(gsr_controller_t *ctrl);

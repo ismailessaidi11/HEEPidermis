@@ -114,10 +114,10 @@ int main(void) {
     gsr_op_request_t request_range_low = { .range = LOW, .resolution = LOW, .power = HIGH };
     gsr_op_request_t request_range_mid = { .range = MEDIUM, .resolution = LOW, .power = HIGH };
     gsr_op_request_t request_range_high = { .range = HIGH, .resolution = LOW, .power = HIGH };
-    gsr_op_request_t request_resolution_mid = { .range = LOW, .resolution = MEDIUM, .power = HIGH };
-    gsr_op_request_t request_resolution_high = { .range = LOW, .resolution = HIGH, .power = HIGH };
-    gsr_op_request_t request_power_low = { .range = LOW, .resolution = LOW, .power = LOW };
-    gsr_op_request_t request_power_mid = { .range = LOW, .resolution = LOW, .power = MEDIUM };
+    gsr_op_request_t request_resolution_mid = { .range = HIGH, .resolution = MEDIUM, .power = HIGH };
+    gsr_op_request_t request_resolution_high = { .range = HIGH, .resolution = HIGH, .power = HIGH };
+    gsr_op_request_t request_power_low = { .range = HIGH, .resolution = LOW, .power = LOW };
+    gsr_op_request_t request_power_mid = { .range = HIGH, .resolution = LOW, .power = MEDIUM };
 
     debug_mark(0x01U, 0U);
     hw_init();
@@ -144,7 +144,9 @@ int main(void) {
             debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
-                   opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
+                   opst == GSR_OPCTRL_MEASUREMENT_ERROR ||
+                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW ||
+                   opst == GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xEBU, (uint32_t)opst);
@@ -175,7 +177,9 @@ int main(void) {
             debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
-                   opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
+                   opst == GSR_OPCTRL_MEASUREMENT_ERROR||
+                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW ||
+                   opst == GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xE8U, (uint32_t)opst);
@@ -207,7 +211,9 @@ int main(void) {
             debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
-                   opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
+                   opst == GSR_OPCTRL_MEASUREMENT_ERROR||
+                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW ||
+                   opst == GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xE5U, (uint32_t)opst);
@@ -238,7 +244,9 @@ int main(void) {
             debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
-                   opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
+                   opst == GSR_OPCTRL_MEASUREMENT_ERROR ||
+                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW ||
+                   opst == GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xEEU, (uint32_t)opst);
@@ -269,7 +277,9 @@ int main(void) {
             debug_mark(0, sample.G_nS);
             reads_done++;
         } else if (opst == GSR_OPCTRL_NOT_INITIALIZED ||
-                   opst == GSR_OPCTRL_MEASUREMENT_ERROR) {
+                   opst == GSR_OPCTRL_MEASUREMENT_ERROR ||
+                   opst == GSR_OPCTRL_MEASUREMENT_UNDERFLOW ||
+                   opst == GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             wait_cycles_busy(wait_cycles);
         } else {
             debug_mark(0xF1U, (uint32_t)opst);
@@ -303,7 +313,9 @@ int main(void) {
             }
             reads_done++;
         } else if (opst != GSR_OPCTRL_MEASUREMENT_ERROR &&
-                   opst != GSR_OPCTRL_NOT_INITIALIZED) {
+                   opst != GSR_OPCTRL_NOT_INITIALIZED &&
+                   opst != GSR_OPCTRL_MEASUREMENT_UNDERFLOW &&
+                   opst != GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             debug_mark(0xF4U, (uint32_t)opst);
             return -1;
         }
@@ -335,7 +347,9 @@ int main(void) {
             }
             reads_done++;
         } else if (opst != GSR_OPCTRL_MEASUREMENT_ERROR &&
-                   opst != GSR_OPCTRL_NOT_INITIALIZED) {
+                   opst != GSR_OPCTRL_NOT_INITIALIZED &&
+                   opst != GSR_OPCTRL_MEASUREMENT_UNDERFLOW &&
+                   opst != GSR_OPCTRL_MEASUREMENT_OVERFLOW) {
             debug_mark(0xF7U, (uint32_t)opst);
             return -1;
         }
