@@ -249,6 +249,9 @@ static gsr_opctrl_status_t gsr_opctrl_recover_overflow(gsr_op_controller_t *ctrl
 
     code = ctrl->operating_point->config.idac_code;
     max_code = ctrl->operating_point->max_current_nA / GSR_IDAC_LSB_NA;
+
+    if (max_code == 0U || code >= max_code) return GSR_OPCTRL_MEASUREMENT_ERROR;
+
     if (max_code > GSR_IDAC_MAX_CODE) {
         max_code = GSR_IDAC_MAX_CODE;
     }
@@ -294,20 +297,22 @@ static void gsr_opctrl_adjust_range(gsr_op_controller_t *ctrl)
     request_levels_t target_range;
     
     target_range = ctrl->current_request.range;
-
     ctrl->request_changed = false;
+
 
     /*
      * Persistent directional out-of-range events mean the requested range is
      * not robust enough. Move one range step in the corrective direction.
      */
     if (underflow_cnt > MAX_OUT_OF_RANGE_EVENTS) {
-        target_range = (request_levels_t)(target_range + 1); // lower i_dc
-        ctrl->request_changed = true;
+        if (target_range < HIGH) {
+            target_range = (request_levels_t)(target_range + 1);
+        }
         reset_out_of_range_counters();
     } else if (overflow_cnt > MAX_OUT_OF_RANGE_EVENTS) {
-        target_range = (request_levels_t)(target_range - 1); // higher i_dc
-        ctrl->request_changed = true;
+        if (target_range > LOW) {
+            target_range = (request_levels_t)(target_range - 1);
+        }
         reset_out_of_range_counters();
     }
 
@@ -318,7 +323,8 @@ static void gsr_opctrl_adjust_range(gsr_op_controller_t *ctrl)
     }
 
     gsr_controller_set_current(ctrl->operating_point, target_code);
-
+    
+    ctrl->request_changed = (target_range != ctrl->current_request.range);
     ctrl->current_request.range = target_range;
 }
 
