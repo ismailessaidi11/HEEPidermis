@@ -66,6 +66,7 @@ def PoI_plotter(model, variance=1, avg_window=1):
     _computation_cache = {
         'last_G': G_init,
         'last_fs': 1.0,
+        'last_D': 1.0,
         'last_variance': False
     }
 
@@ -86,21 +87,26 @@ def PoI_plotter(model, variance=1, avg_window=1):
         """Update ΔG slider range when G, fs, or variance changes"""
         G_value = G_slider.value
         fs_value = fs_slider.value
+        D_value = D_slider.value
         active_variance = variance if variance_on.value else 0
 
         # Skip redundant computations
         if (_computation_cache['last_G'] == G_value and 
             _computation_cache['last_fs'] == fs_value and 
+            _computation_cache['last_D'] == D_value and
             _computation_cache['last_variance'] == variance_on.value):
             return
 
         _computation_cache['last_G'] = G_value
         _computation_cache['last_fs'] = fs_value
+        _computation_cache['last_D'] = D_value
         _computation_cache['last_variance'] = variance_on.value
+
+        f_int_Hz = fs_value / D_value
 
         min_deltaG, max_deltaG = model.compute_delta_G_range_nS(
             G_value,
-            fs_value,
+            f_int_Hz=f_int_Hz,
             variance=active_variance,
             avg_window=avg_window
         )
