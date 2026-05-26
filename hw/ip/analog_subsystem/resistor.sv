@@ -16,7 +16,8 @@ module resistor #(
     int    line_end       = 600_000
 ) (
     input  logic refresh,
-    output real  r_ohm
+    output real  r_ohm,
+    output real  G_nS
 );
 
   // scaling: one code LSB in Siemens
@@ -29,6 +30,7 @@ module resistor #(
   real g_siemens;
 
   real r_table[$];
+  real g_ns_table[$];
   int current_line = 1;  // Track the current line number
 
 
@@ -57,10 +59,16 @@ module resistor #(
 
           if (g_siemens <= 0.0) begin
             // Safety check: handle empty table if line_start is the very first line
-            if (r_table.size() > 0) r_table.push_back(r_table[r_table.size()-1]);
-            else r_table.push_back(0.0);  // Or a suitable default
+            if (r_table.size() > 0) begin
+              r_table.push_back(r_table[r_table.size()-1]);
+              g_ns_table.push_back(g_ns_table[g_ns_table.size()-1]);
+            end else begin
+              r_table.push_back(0.0);  // Or a suitable default
+              g_ns_table.push_back(0.0);
+            end
           end else begin
             r_table.push_back(1.0 / g_siemens);
+            g_ns_table.push_back(g_siemens * 1.0e9);
           end
         end
 
@@ -78,6 +86,7 @@ module resistor #(
 
 
     r_ohm        = (r_table.size() != 0) ? r_table[0] : R_MAX_R;
+    G_nS         = (g_ns_table.size() != 0) ? g_ns_table[0] : 0.0;
     last_step_ns = 0;
     idx          = 0;
     r_ohm        = (r_table.size() != 0) ? r_table[0] : R_MAX_R;
@@ -96,6 +105,7 @@ module resistor #(
       steps = dt_ns / STEP_NS;
       idx <= (idx + steps) % r_table.size();
       r_ohm <= r_table[(idx+steps)%r_table.size()];
+      G_nS <= g_ns_table[(idx+steps)%g_ns_table.size()];
       last_step_ns <= last_step_ns + steps * STEP_NS;
     end
     // verilator lint_on WIDTH

@@ -11,7 +11,10 @@
 #define IDAC_DEFAULT_CAL 15U
 #define VREF_DEFAULT_CAL 0b1111111111U
 
-#define N_VALID_SAMPLES  2U
+#define N_VALID_SAMPLES  5U
+#define DBG_SAMPLE_TAG   0x00U
+#define DBG_PHASE_TAG    0xA0U
+#define DBG_DONE_TAG     0xAFU
 
 volatile uint32_t debug __attribute__((section(".xheep_debug_mem")));
 
@@ -19,6 +22,26 @@ void __attribute__((aligned(4), interrupt)) handler_irq_timer(void) {
     vco_handle_timer_irq();
     debug = 'wake';
 }
+#ifndef DUTY_SEQ_ID
+#define DUTY_SEQ_ID 1
+#endif
+
+static const uint8_t duty_seq_1[] = {8U, 4U, 2U, 1U};
+static const uint8_t duty_seq_2[] = {1U, 2U, 4U, 8U};
+static const uint8_t duty_seq_3[] = {4U, 1U, 8U, 2U};
+static const uint8_t duty_seq_4[] = {2U, 8U, 1U, 4U};
+
+#if DUTY_SEQ_ID == 1
+#define DUTY_SEQ duty_seq_1
+#elif DUTY_SEQ_ID == 2
+#define DUTY_SEQ duty_seq_2
+#elif DUTY_SEQ_ID == 3
+#define DUTY_SEQ duty_seq_3
+#elif DUTY_SEQ_ID == 4
+#define DUTY_SEQ duty_seq_4
+#else
+#error "Invalid DUTY_SEQ_ID"
+#endif
 
 static void debug_mark(uint8_t tag, uint32_t value) {
     debug = ((uint32_t)tag << 24) | (value & 0x00FFFFFFU);
@@ -69,7 +92,7 @@ static int measure(gsr_controller_t *ctrl, uint8_t n_samples) {
 
     while (samples_cnt < n_samples) {
         st = gsr_read_sample(ctrl);  // attempt tap/read after event
-        debug_mark(samples_cnt, (uint32_t)st);
+        // debug_mark(samples_cnt, (uint32_t)st);
 
         if (st == GSR_STATUS_OK) {
             sample = gsr_get_last_sample(ctrl);
@@ -77,7 +100,7 @@ static int measure(gsr_controller_t *ctrl, uint8_t n_samples) {
                 debug_mark((uint8_t)(0xE1), 0U);
                 return -1;
             }
-            debug_mark(0, sample->G_nS);
+            debug_mark(DBG_SAMPLE_TAG, sample->G_nS);
             samples_cnt++;
         } else if (st == GSR_STATUS_MISSED_UPDATE || st == GSR_STATUS_NO_NEW_SAMPLE) {
             continue;
@@ -89,10 +112,9 @@ static int measure(gsr_controller_t *ctrl, uint8_t n_samples) {
     return 0;
 }
 
-static int set_duty_and_measure(gsr_controller_t *ctrl, uint8_t duty_cycle_code, uint32_t marker, gsr_ctrl_mode_t mode) {
+static int set_duty_and_measure(gsr_controller_t *ctrl, uint8_t duty_cycle_code, gsr_ctrl_mode_t mode) {
     gsr_status_t st;
 
-    debug = marker;
     ctrl->config.duty_cycle_code = duty_cycle_code;
     ctrl->mode = mode;
     st = gsr_controller_set_config(ctrl);
@@ -100,6 +122,7 @@ static int set_duty_and_measure(gsr_controller_t *ctrl, uint8_t duty_cycle_code,
         debug_mark(0xE3U, (uint32_t)st);
         return -1;
     }
+    debug_mark(DBG_PHASE_TAG, duty_cycle_code);
 
     return measure(ctrl, N_VALID_SAMPLES);
 }
@@ -114,31 +137,12 @@ int main(void) {
         return -1;
     }
 
-    if (set_duty_and_measure(&ctrl, 8U, 'D12', GSR_CTRL_MODE_PHASIC) != 0) {
-        return -1;
+    for (uint8_t i = 0; i < 4U; ++i) {
+        if (set_duty_and_measure(&ctrl, DUTY_SEQ[i], GSR_CTRL_MODE_PHASIC) != 0) {
+            return -1;
+        }
     }
-    if (set_duty_and_measure(&ctrl, 4U, 'D12', GSR_CTRL_MODE_PHASIC) != 0) {
-        return -1;
-    }
-
-    if (set_duty_and_measure(&ctrl, 2U, 'D50', GSR_CTRL_MODE_PHASIC) != 0) {
-        return -1;
-    }
-
-    if (set_duty_and_measure(&ctrl, 8U, 'D12', GSR_CTRL_MODE_BASELINE) != 0) {
-        return -1;
-    }
-    if (set_duty_and_measure(&ctrl, 4U, 'D12', GSR_CTRL_MODE_BASELINE) != 0) {
-        return -1;
-    }
-
-    if (set_duty_and_measure(&ctrl, 2U, 'D50', GSR_CTRL_MODE_BASELINE) != 0) {
-        return -1;
-    }
-    // if (set_duty_and_measure(&ctrl, 1U, 'D100') != 0) {
-    //     return -1;
-    // }
-
-    debug = 'pass';
+    
+    debug_mark(DBG_DONE_TAG, 0U);
     return 0;
 }

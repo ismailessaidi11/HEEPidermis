@@ -45,6 +45,7 @@ module analog_subsystem #(
   integer VCOp_VIN_int_uV;
   integer VCOn_VIN_int_uV;
   real    resistance_O;
+  real    conductance_nS;
   /* verilator lint_on UNUSED */
 
   // Analog blocks
@@ -73,7 +74,8 @@ module analog_subsystem #(
 
   resistor rskin (
       .refresh(clk_i),
-      .r_ohm  (resistance_O)
+      .r_ohm  (resistance_O),
+      .G_nS   (conductance_nS)
   );
 
   always_comb begin

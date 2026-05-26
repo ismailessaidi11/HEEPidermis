@@ -77,7 +77,7 @@ gsr_opctrl_status_t gsr_opctrl_plan(const gsr_op_request_t *request,
     operating_point->config.phasic_refresh_rate_Hz =  k_refresh_profiles[2].refresh_rate_Hz;
 
     // placeholder for now because duty cycling the VCO is not implemented yet.
-    operating_point->config.D = k_power_profiles[(uint32_t)request->power].D;
+    operating_point->config.duty_cycle_code = k_power_profiles[(uint32_t)request->power].duty_cycle_code;
     
     return GSR_OPCTRL_OK;
 }

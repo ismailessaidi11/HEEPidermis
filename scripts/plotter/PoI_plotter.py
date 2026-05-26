@@ -35,6 +35,13 @@ def PoI_plotter(model, variance=1, avg_window=1):
         layout=Layout(width='300px')
     )
 
+    D_slider = FloatSlider(
+        value=1.0, min=0.1, max=1.0, step=0.1,
+        description='D:',
+        continuous_update=False,
+        layout=Layout(width='300px')
+    )
+
     delta_G_slider = FloatSlider(
         value=0.10, min=0.0, max=1.0, step=0.01,
         description='ΔG tgt (nS):',
@@ -59,6 +66,7 @@ def PoI_plotter(model, variance=1, avg_window=1):
     _computation_cache = {
         'last_G': G_init,
         'last_fs': 1.0,
+        'last_D': 1.0,
         'last_variance': False
     }
 
@@ -79,21 +87,26 @@ def PoI_plotter(model, variance=1, avg_window=1):
         """Update ΔG slider range when G, fs, or variance changes"""
         G_value = G_slider.value
         fs_value = fs_slider.value
+        D_value = D_slider.value
         active_variance = variance if variance_on.value else 0
 
         # Skip redundant computations
         if (_computation_cache['last_G'] == G_value and 
             _computation_cache['last_fs'] == fs_value and 
+            _computation_cache['last_D'] == D_value and
             _computation_cache['last_variance'] == variance_on.value):
             return
 
         _computation_cache['last_G'] = G_value
         _computation_cache['last_fs'] = fs_value
+        _computation_cache['last_D'] = D_value
         _computation_cache['last_variance'] = variance_on.value
+
+        f_int_Hz = fs_value / D_value
 
         min_deltaG, max_deltaG = model.compute_delta_G_range_nS(
             G_value,
-            fs_value,
+            f_int_Hz=f_int_Hz,
             variance=active_variance,
             avg_window=avg_window
         )
@@ -128,6 +141,7 @@ def PoI_plotter(model, variance=1, avg_window=1):
             G_slider,
             i_dc_slider,
             fs_slider,
+            D_slider,
             HBox([variance_on], layout=Layout(justify_content='center', width='320px')),
 
         ],
@@ -161,10 +175,10 @@ def PoI_plotter(model, variance=1, avg_window=1):
         )
     )
 
-    def _plot(G_uS, i_dc_uA, fs_Hz, delta_G_target_nS, P_tot_max_uW, variance_enabled):
+    def _plot(G_uS, i_dc_uA, fs_Hz, D, delta_G_target_nS, P_tot_max_uW, variance_enabled):
         active_variance = variance if variance_enabled else 0
 
-        fwd_in = forward_input(G_uS=G_uS, i_dc_uA=i_dc_uA, fs_Hz=fs_Hz)
+        fwd_in = forward_input(G_uS=G_uS, i_dc_uA=i_dc_uA, fs_Hz=fs_Hz, D=D)
         result = forward_compute(
             model=model,
             input=fwd_in,
@@ -175,6 +189,7 @@ def PoI_plotter(model, variance=1, avg_window=1):
         rev_in = reverse_input(
             G_uS=G_uS,
             fs_Hz=fs_Hz,
+            D=D,
             delta_G_target_nS=delta_G_target_nS,
             P_tot_max_uW=P_tot_max_uW
         )
@@ -196,6 +211,7 @@ def PoI_plotter(model, variance=1, avg_window=1):
             fig.add_subplot(gs[2, 0]),
             model,
             result,
+            D=D,
             variance=active_variance,
             avg_window=avg_window,
             reverse_result=reverse_result
@@ -221,6 +237,7 @@ def PoI_plotter(model, variance=1, avg_window=1):
             'G_uS': G_slider,
             'i_dc_uA': i_dc_slider,
             'fs_Hz': fs_slider,
+            'D': D_slider,
             'delta_G_target_nS': delta_G_slider,
             'P_tot_max_uW': P_tot_max_slider,
             'variance_enabled': variance_on

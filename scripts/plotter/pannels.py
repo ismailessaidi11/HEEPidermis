@@ -39,9 +39,10 @@ def plot_forward_summary(ax, result, model=None):
     ax.axis("off")
 
     txt = (
-        f"G:        {result.input.G_uS:.4f} μS\n"
-        f"i_dc:     {result.input.i_dc_uA:.4f} μA\n"
-        f"f_s:      {result.input.fs_Hz:.4f} Hz\n\n"
+        f"G:        {result.input.G_uS:.2f} μS\n"
+        f"i_dc:     {result.input.i_dc_uA:.2f} μA\n"
+        f"f_s:      {result.input.fs_Hz:.0f} Hz\n"
+        f"D:        {result.input.D * 100:.0f}%\n\n"
         f"V_in:     {result.intermediate.vin_mV:.4f} mV\n"
         f"ΔV_in:    {result.intermediate.dVin_mV*1000:.4f} μV\n"
         f"f_osc:    {result.intermediate.f_osc_kHz:.4f} kHz\n"
@@ -71,15 +72,26 @@ def plot_forward_df_components(ax, result):
     labels = [
         r'$\Delta f_{samp}$',
         r'$\Delta f_{adev}$',
-        r'$\Delta f_{osc}$'
+        r'$\Delta f_{osc}$ = max'
     ]
     values = [
         result.intermediate.df_osc_sampling_Hz,
         result.intermediate.df_osc_adev_Hz,
         result.intermediate.df_osc_Hz
     ]
-
-    ax.bar(labels, values)
+    
+    # Use different colors to highlight that df_osc is the max
+    colors = ['steelblue', 'steelblue', 'coral']
+    
+    bars = ax.bar(labels, values, color=colors, alpha=0.7)
+    
+    # Add annotation on the max bar showing it's the maximum
+    max_bar = bars[2]
+    height = max_bar.get_height()
+    ax.text(max_bar.get_x() + max_bar.get_width()/2., height,
+            'max(sampling, adev)',
+            ha='center', va='bottom', fontsize=9, style='italic', color='coral')
+    
     ax.set_ylabel("Hz")
     ax.set_title("Frequency error contributions")
     ax.grid(True, axis='y', alpha=0.3)
@@ -114,10 +126,11 @@ def plot_forward_outputs(ax, result):
     ax.set_title("Output metrics")
     ax.grid(True, axis='y', alpha=0.3)
 
-def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1, reverse_result=None):
+def plot_forward_tradeoff(ax, model, result, D, variance=1, avg_window=1, reverse_result=None):
     G_uS = result.input.G_uS
     fs_Hz = result.input.fs_Hz
     max_i_dc = model.i_dc_max(result.input.G_uS)
+    f_int_Hz = fs_Hz / D
 
     i_vals = model.params.i_dc_range
     i_vals = i_vals[i_vals <= max_i_dc] 
@@ -132,15 +145,15 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1, reverse_r
                 G_uS=G_uS,
                 vin_mV=vin_mV,
                 i_dc_uA=i_dc,
-                fs_Hz=fs_Hz,
+                f_int_Hz=f_int_Hz,
                 variance=variance,
                 avg_window=avg_window
             )
         )
 
-        p_idc = model.idc_power_uW(vin_mV, i_dc)
-        p_vco = model.pvco_from_vin(vin_mV)
-        p_cnt = model.pcnt_from_vin(vin_mV)
+        p_idc = model.idc_power_uW(vin_mV, i_dc, D)
+        p_vco = model.pvco_from_vin(vin_mV, D)
+        p_cnt = model.pcnt_from_vin(vin_mV, D)
         ptot_vals.append(p_idc + p_vco + p_cnt)
 
     deltaG_vals_nS = np.asarray(deltaG_vals_uS, dtype=float) * 1000  # Convert to nS
@@ -177,14 +190,16 @@ def plot_forward_tradeoff(ax, model, result, variance=1, avg_window=1, reverse_r
                 color='green',
                 label='feasible region'
             )
-        i_opt = reverse_result.output.i_dc_opt_uA
+        i_delta_G_opt = reverse_result.output.i_dc_delta_G_opt_uA
+        i_power_opt = reverse_result.output.i_dc_power_opt_uA
         dG_opt_nS = reverse_result.output.delta_G_opt_uS * 1000
         P_opt = reverse_result.output.P_tot_opt_uW
 
-        ax.plot(i_opt, dG_opt_nS, 'g*', markersize=8, zorder=6)
-        ax2.axvline(i_opt, color='green', linestyle='--', alpha=0.5, label='optimal $i_{dc}$')
+        ax.plot(i_delta_G_opt, dG_opt_nS, 'g*', markersize=8, zorder=6)
+        ax2.axvline(i_delta_G_opt, color='green', linestyle='--', alpha=0.5, label='optimal delta_G $i_{dc}$')
 
-        ax2.plot(i_opt, P_opt, 'g*', markersize=8, zorder=6)
+        ax2.plot(i_power_opt, P_opt, 'b*', markersize=8, zorder=6)
+        ax2.axvline(i_power_opt, color='blue', linestyle='--', alpha=0.5, label='optimal power $i_{dc}$')
 
     elif reverse_result is not None and not reverse_result.output.feasible:
         ax.text(
@@ -217,7 +232,8 @@ def plot_summary(ax, result, model, variance=1, avg_window=1,reverse_result=None
         txt += f"\n─────────────\nOptimal i_dc search...\n"
         if reverse_result.output.feasible:
             txt += (
-                f"i_dc_opt:    {reverse_result.output.i_dc_opt_uA:.4f} μA\n"
+                f"i_delta_G_opt:    {reverse_result.output.i_dc_delta_G_opt_uA:.4f} μA\n"
+                f"i_power_opt:    {reverse_result.output.i_dc_power_opt_uA:.4f} μA\n"
                 f"ΔG_opt:      {reverse_result.output.delta_G_opt_uS * 1000:.4f} nS\n"
                 f"P_opt:       {reverse_result.output.P_tot_opt_uW:.4f} μW\n"
             )

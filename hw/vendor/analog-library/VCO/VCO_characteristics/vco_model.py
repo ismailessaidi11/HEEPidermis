@@ -255,16 +255,16 @@ class VCOADCModel:
 
         return self._restore_shape(G_uS, vin_scalar, idc_scalar)
 
-    def df_osc_adev_Hz(self, vin_mV, fs_Hz):
+    def df_osc_adev_Hz(self, vin_mV, f_int_Hz):
         if self.interp_adev is None:
-            fs_arr = np.asarray(fs_Hz, dtype=float)
-            return np.zeros_like(fs_arr, dtype=float)
+            f_int_arr = np.asarray(f_int_Hz, dtype=float)
+            return np.zeros_like(f_int_arr, dtype=float)
 
         vin_arr = np.asarray(vin_mV, dtype=float)
-        fs_arr = np.asarray(fs_Hz, dtype=float)
+        f_int_arr = np.asarray(f_int_Hz, dtype=float)
 
         vin_V = vin_arr * 1e-3
-        tau = np.clip(1.0 / fs_arr, 0.1, 5.0)
+        tau = np.clip(1.0 / f_int_arr, 0.1, 5.0)
 
         vin_V, tau = np.broadcast_arrays(vin_V, tau)
 
@@ -277,20 +277,20 @@ class VCOADCModel:
         out = f_osc_Hz * adev
         return out.item() if out.ndim == 0 else out
     
-    def df_osc_sampling_Hz(self, fs_Hz=None, avg_window=1):
-        if fs_Hz is None:
-            raise ValueError("fs_Hz must be provided to compute delta_f_osc_Hz.")
+    def df_osc_sampling_Hz(self, f_int_Hz=None, avg_window=1):
+        if f_int_Hz is None:
+            raise ValueError("f_int_Hz must be provided to compute delta_f_osc_Hz.")
 
-        fs_Hz = np.asarray(fs_Hz, dtype=float)
+        f_int_Hz = np.asarray(f_int_Hz, dtype=float)
         avg_window = float(avg_window)
-        invalid = (fs_Hz <= 0) | (avg_window <= 0)
-        result = np.where(invalid, np.nan, fs_Hz * np.sqrt(avg_window))
+        invalid = (f_int_Hz <= 0) | (avg_window <= 0)
+        result = np.where(invalid, np.nan, f_int_Hz * np.sqrt(avg_window))
 
         return result.item() if np.ndim(result) == 0 else result
 
-    def df_osc_Hz(self, vin_mV, fs_Hz, variance=1, avg_window=1):
-        df_samp = self.df_osc_sampling_Hz(fs_Hz, avg_window=avg_window)
-        df_adev = variance * self.df_osc_adev_Hz(vin_mV, fs_Hz)
+    def df_osc_Hz(self, vin_mV, f_int_Hz, variance=1, avg_window=1):
+        df_samp = self.df_osc_sampling_Hz(f_int_Hz, avg_window=avg_window)
+        df_adev = variance * self.df_osc_adev_Hz(vin_mV, f_int_Hz)
         out = np.maximum(df_samp, df_adev)
         return out.item() if np.ndim(out) == 0 else out
     
@@ -306,9 +306,9 @@ class VCOADCModel:
 
         return out.item() if out.ndim == 0 else out
 
-    def delta_G_uS(self, G_uS, vin_mV, i_dc_uA, fs_Hz, variance=1, avg_window=1):
+    def delta_G_uS(self, G_uS, vin_mV, i_dc_uA, f_int_Hz, variance=1, avg_window=1):
         k_vco_kHz_per_mV = self.kvco_kHz_per_mV(vin_mV)  
-        df_osc = self.df_osc_Hz(vin_mV=vin_mV, fs_Hz=fs_Hz, variance=variance, avg_window=avg_window)
+        df_osc = self.df_osc_Hz(vin_mV=vin_mV, f_int_Hz=f_int_Hz, variance=variance, avg_window=avg_window)
 
         _, _, vin_2d, _, vin_scalar, idc_scalar = self._prepare_grid(vin_mV, i_dc_uA)
         vin_V = vin_2d * 1e-3
@@ -337,31 +337,31 @@ class VCOADCModel:
 
         return self._restore_shape(dG_uS, vin_scalar, idc_scalar)
     
-    def idc_power_uW(self, vin_mV, i_dc_uA):
+    def idc_power_uW(self, vin_mV, i_dc_uA, D=1.0):
         vin_arr = np.asarray(vin_mV, dtype=float)
         i_arr = np.asarray(i_dc_uA, dtype=float)
 
-        vin_V = vin_arr * 1e-3
         i_dc_A = i_arr * 1e-6
-        power_idc_uW = i_dc_A * vin_V * 1e6
+        power_idc_uW = i_dc_A * self.params.vdd * 1e6
 
 
         invalid = (vin_arr < self.piecewise_threshold) | np.isnan(vin_arr) | np.isnan(i_arr)
         power_idc_uW = np.where(invalid, np.nan, power_idc_uW)
+        power_idc_uW *= D
 
         return power_idc_uW.item() if np.isscalar(vin_mV) and np.isscalar(i_dc_uA) else power_idc_uW
     
-    def pvco_from_vin(self, vin_mV):
-        return np.interp(vin_mV, self.vin_data, self.pvco_data)
+    def pvco_from_vin(self, vin_mV, D=1.0):
+        return np.interp(vin_mV, self.vin_data, self.pvco_data) * D
 
-    def pcnt_from_vin(self, vin_mV):
-        return np.interp(vin_mV, self.vin_data, self.pcnt_data)
+    def pcnt_from_vin(self, vin_mV, D=1.0):
+        return np.interp(vin_mV, self.vin_data, self.pcnt_data) * D
     
     def i_dc_max(self, G_uS):
         return min(float(G_uS * (self.vdd_mV() - self.params.vin_min_mV) / 1000), self.params.idc_max)
     
-    def compute_delta_G_range_nS(self, G_uS, fs_Hz, variance, avg_window):
-        """Compute min/max deltaG range for given G and fs values"""
+    def compute_delta_G_range_nS(self, G_uS, f_int_Hz, variance, avg_window):
+        """Compute min/max deltaG range for given G and f_int values"""
         i_vals = self.params.i_dc_range
         max_i_dc = self.i_dc_max(G_uS)
         i_vals_valid = i_vals[i_vals <= max_i_dc]
@@ -374,7 +374,7 @@ class VCOADCModel:
                 G_uS=G_uS,
                 vin_mV=vin_mV,
                 i_dc_uA=i_dc,
-                fs_Hz=fs_Hz,
+                f_int_Hz=f_int_Hz,
                 variance=variance,
                 avg_window=avg_window
             )

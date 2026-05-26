@@ -24,13 +24,13 @@ static gsr_status_t controller_set_current(gsr_controller_t *ctrl, uint8_t idac_
 
     if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
     current_nA = gsr_current_from_idac_code_nA(idac_code);
-    if (ctrl->max_current_nA < GUARD_IDC_NA) { // TODO: handle that differently in the future
-        return GSR_STATUS_OUT_OF_RANGE; // current limits are too low to safely update, this is a protective check to prevent underflow in the next check
-    }
-    // check validity of current range.
-    if (current_nA > ctrl->max_current_nA - GUARD_IDC_NA) {
-        return GSR_STATUS_OUT_OF_RANGE;
-    }
+    // if (ctrl->max_current_nA < GUARD_IDC_NA) { // TODO: handle that differently in the future
+    //     return GSR_STATUS_OUT_OF_RANGE; // current limits are too low to safely update, this is a protective check to prevent underflow in the next check
+    // }
+    // // check validity of current range.
+    // if (current_nA > ctrl->max_current_nA - GUARD_IDC_NA) { 
+    //     return GSR_STATUS_OUT_OF_RANGE;
+    // }
 
     // current configuration
     ctrl->config.idac_code = idac_code;
@@ -41,7 +41,7 @@ static gsr_status_t controller_set_current(gsr_controller_t *ctrl, uint8_t idac_
     return GSR_STATUS_OK;
 }
 
-static gsr_status_t controller_set_vco(gsr_controller_t *ctrl, gsr_ctrl_mode_t mode, uint8_t D) {
+static gsr_status_t controller_set_vco(gsr_controller_t *ctrl, gsr_ctrl_mode_t mode, uint8_t duty_cycle_code) {
     if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
     uint32_t new_rate_Hz;
     gsr_status_t ret;
@@ -59,9 +59,7 @@ static gsr_status_t controller_set_vco(gsr_controller_t *ctrl, gsr_ctrl_mode_t m
             return GSR_STATUS_INVALID_ARGUMENT;
     }
     ctrl->config.current_refresh_rate_Hz = new_rate_Hz; // keep track of the current refresh rate in the controller state for reference
-    ret = gsr_status_from_vco(vco_set_refresh_rate(new_rate_Hz));
-    if (ret != GSR_STATUS_OK) return ret;
-    ret = gsr_status_from_vco(vco_duty_cycle(ctrl->config.channel, D));
+    ret = gsr_status_from_vco(vco_config(ctrl->config.channel, new_rate_Hz, duty_cycle_code));
     return ret;
 }
 
@@ -199,7 +197,7 @@ gsr_status_t gsr_set_default_settings(gsr_controller_t *ctrl) {
     }
 
     ctrl->config.channel = VCO_CHANNEL_P;
-    ctrl->config.D = 255; // 100% duty cycle
+    ctrl->config.duty_cycle_code = 1; // 100% duty cycle
     ctrl->config.M = 1; // no oversampling by default, just take one measurement per sample. This can be increased for more noisy environments at the cost of temporal resolution and power consumption.
     ctrl->config.baseline_refresh_rate_Hz = 2;
     ctrl->config.phasic_refresh_rate_Hz = 10;
@@ -230,7 +228,7 @@ gsr_status_t gsr_controller_set_config(gsr_controller_t *ctrl) {
     if (ret != GSR_STATUS_OK) return ret;
 
     // setup the config of the VCO Hardware registers
-    ret = controller_set_vco(ctrl, ctrl->mode, config->D);
+    ret = controller_set_vco(ctrl, ctrl->mode, config->duty_cycle_code);
     if (ret != GSR_STATUS_OK) return ret;
 
     return ret;
@@ -321,14 +319,14 @@ gsr_status_t gsr_read_sample(gsr_controller_t *ctrl)
 {
     if (ctrl == NULL) return GSR_STATUS_INVALID_ARGUMENT;
 
-    if (ctrl->config.D == 255U) { // no duty cycling
+    if (ctrl->config.duty_cycle_code == 1U) { // no duty cycling 
         return gsr_read_sample_now(ctrl);
     }
 
     while (1) {
         asm volatile("wfi");
 
-        if (!vco_duty_cycle_is_on()) {
+        if (!vco_is_on()) {
             return gsr_read_sample_now(ctrl);
         }
     }
@@ -382,7 +380,7 @@ gsr_status_t gsr_controller_step(gsr_controller_t *ctrl) {
             // retune_current_for_baseline(ctrl);
 
             if (event_detected(ctrl)) {
-                st = controller_set_vco(ctrl, GSR_CTRL_MODE_PHASIC, ctrl->config.D);
+                st = controller_set_vco(ctrl, GSR_CTRL_MODE_PHASIC, ctrl->config.duty_cycle_code);
                 if (st != GSR_STATUS_OK) return st;
 
                 ctrl->config.current_refresh_rate_Hz = ctrl->config.phasic_refresh_rate_Hz;
@@ -394,7 +392,7 @@ gsr_status_t gsr_controller_step(gsr_controller_t *ctrl) {
         // Phasic mode increases sampling rate to better capture fast events.
         case GSR_CTRL_MODE_PHASIC:
             if (signal_settled(ctrl)) {
-                st = controller_set_vco(ctrl, GSR_CTRL_MODE_RECOVERY, ctrl->config.D);
+                st = controller_set_vco(ctrl, GSR_CTRL_MODE_RECOVERY, ctrl->config.duty_cycle_code);
                 if (st != GSR_STATUS_OK) return st;
 
                 ctrl->config.current_refresh_rate_Hz = ctrl->config.recovery_refresh_rate_Hz;
@@ -406,7 +404,7 @@ gsr_status_t gsr_controller_step(gsr_controller_t *ctrl) {
         // Recovery mode uses an intermediate sampling rate until the signal is stable again.
         case GSR_CTRL_MODE_RECOVERY:
             if (!signal_settled(ctrl)) {
-                st = controller_set_vco(ctrl, GSR_CTRL_MODE_PHASIC, ctrl->config.D);
+                st = controller_set_vco(ctrl, GSR_CTRL_MODE_PHASIC, ctrl->config.duty_cycle_code);
                 if (st != GSR_STATUS_OK) return st;
 
                 ctrl->config.current_refresh_rate_Hz = ctrl->config.phasic_refresh_rate_Hz;
@@ -420,7 +418,7 @@ gsr_status_t gsr_controller_step(gsr_controller_t *ctrl) {
             if (ctrl->recovery_counter >= ctrl->recovery_count_required) {
                 // retune_current_for_baseline(ctrl); // CHANGE: removed since Esmail will be working on this.
 
-                st = controller_set_vco(ctrl, GSR_CTRL_MODE_BASELINE, ctrl->config.D);
+                st = controller_set_vco(ctrl, GSR_CTRL_MODE_BASELINE, ctrl->config.duty_cycle_code);
                 if (st != GSR_STATUS_OK) return st;
 
                 ctrl->config.current_refresh_rate_Hz = ctrl->config.baseline_refresh_rate_Hz;
